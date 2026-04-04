@@ -6,6 +6,7 @@ import { HabitTracker } from "../services/habit-tracker";
 import { ScheduleManager } from "../services/schedule-manager";
 import { HabitModal } from "../modals/habit-modal";
 import { ScheduleModal } from "../modals/schedule-modal";
+import { WaveIntro } from "./wave-intro";
 import type SinPlugin from "../main";
 
 const DAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
@@ -47,7 +48,23 @@ export class WaveView extends ItemView {
 
   async onOpen(): Promise<void> {
     await this.fileManager.ensureFolders();
-    this.render();
+
+    // Phase 2: auto-generate today's log so habits appear even without a toggle
+    try {
+      await this.habitTracker.ensureTodayLog(new Date());
+    } catch {
+      // Non-fatal: best-effort log init
+    }
+
+    if (this.plugin.settings.showIntroAnimation) {
+      // Render content first (hidden behind overlay), then play intro.
+      await this.render();
+      const container = this.containerEl.children[1] as HTMLElement;
+      const intro = new WaveIntro(container);
+      await intro.play();
+    } else {
+      await this.render();
+    }
   }
 
   async onClose(): Promise<void> {
@@ -159,9 +176,17 @@ export class WaveView extends ItemView {
           const nowCompleted = await this.habitTracker.toggleCompletion(habit, today);
           item.toggleClass("sin-habit-item--done", nowCompleted);
           if (nowCompleted) {
+            // Checkmark enters with a scale animation (CSS @keyframes)
             checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
           } else {
-            checkbox.empty();
+            // Checkmark exits with a scale-out animation before removal
+            const check = checkbox.querySelector(".sin-checkbox-check");
+            if (check instanceof HTMLElement) {
+              check.addClass("sin-checkbox-check--exit");
+              setTimeout(() => checkbox.empty(), 200);
+            } else {
+              checkbox.empty();
+            }
           }
           this.ripple(item);
         } catch (e) {
