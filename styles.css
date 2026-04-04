@@ -484,11 +484,16 @@
 
 /* ============================================================
    Reduced motion
+   ============================================================
+   NOTE: canvas wave animation and intro overlay are controlled
+   exclusively by the plugin settings (waveAnimationEnabled /
+   showIntroAnimation). We do NOT hide them via CSS so that
+   `display: none` never forces getBoundingClientRect() to return
+   0 and never overrides the user's explicit plugin preferences.
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .sin-wave-canvas { display: none; }
-  .sin-wave-intro-overlay { display: none; }
+  /* Canvas and overlay: keep in layout — JS settings control visibility */
   .sin-ripple { display: none; }
   .sin-btn { transition: none; }
   .sin-habit-item { transition: none; }
