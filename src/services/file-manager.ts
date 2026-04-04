@@ -169,7 +169,12 @@ export class SinFileManager {
       .replace(/[^\w-]/g, "")
       .replace(/-+/g, "-")
       .slice(0, 40) || "habit";
-    return normalizePath(`${this.habitsFolder()}/${slug}.md`);
+
+    const base = normalizePath(`${this.habitsFolder()}/${slug}.md`);
+    if (!this.app.vault.getAbstractFileByPath(base)) return base;
+
+    const ts = Date.now().toString(36);
+    return normalizePath(`${this.habitsFolder()}/${slug}-${ts}.md`);
   }
 
   // ---- Schedules -------------------------------------------
@@ -219,7 +224,12 @@ export class SinFileManager {
   /** Generate a unique file path for a new schedule. */
   newSchedulePath(date: string, name: string): string {
     const slug = nameToSlug(name);
-    return normalizePath(`${this.schedulesFolder()}/${date}_${slug}.md`);
+
+    const base = normalizePath(`${this.schedulesFolder()}/${date}_${slug}.md`);
+    if (!this.app.vault.getAbstractFileByPath(base)) return base;
+
+    const ts = Date.now().toString(36);
+    return normalizePath(`${this.schedulesFolder()}/${date}_${slug}-${ts}.md`);
   }
 
   // ---- Logs ------------------------------------------------

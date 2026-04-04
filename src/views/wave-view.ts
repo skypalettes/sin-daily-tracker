@@ -540,21 +540,32 @@ export class WaveView extends ItemView {
 
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
 
+    // Number of wave lines tiled vertically per layer
+    const wavesPerLayer = 4;
+
     for (let i = 0; i < layerCount; i++) {
       const { amplitude, frequency, speed, opacity } = WAVE_LAYERS[i];
-      ctx.beginPath();
-      ctx.globalAlpha = opacity;
       ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = opacity;
 
-      for (let x = 0; x <= width; x++) {
-        const y =
-          height / 2 +
-          amplitude * Math.sin(frequency * x + this.waveOffset * speed * 60);
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      // Spacing between repeated wave lines
+      const spacing = height / wavesPerLayer;
+      // scrollY increases → wave moves upward (subtract from Y)
+      const scrollY = (this.waveOffset * speed * 20) % spacing;
+
+      for (let w = 0; w < wavesPerLayer + 1; w++) {
+        // Start from bottom, scroll upward over time
+        const baseY = height - w * spacing + scrollY;
+
+        ctx.beginPath();
+        for (let x = 0; x <= width; x++) {
+          const y = baseY + amplitude * Math.sin(frequency * x + i * 2.1 + w * 1.3);
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
     }
 
     ctx.globalAlpha = 1;
