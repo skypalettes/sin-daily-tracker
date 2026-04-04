@@ -1,0 +1,10 @@
+{
+  "id": "sin-time-manager",
+  "name": "Sin",
+  "version": "0.1.0",
+  "minAppVersion": "0.15.0",
+  "description": "Time management based schedule and habit tracker. Manage recurring habits and scheduled events with a wave-inspired UI.",
+  "author": "irunahub",
+  "authorUrl": "https://github.com/irunahub",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,588 @@
+/* ============================================================
+   Sin Plugin Styles
+   ============================================================ */
+
+/* ---- CSS Custom Properties -------------------------------- */
+:root {
+  --sin-primary: var(--interactive-accent);
+  --sin-bg: var(--background-primary);
+  --sin-bg-secondary: var(--background-secondary);
+  --sin-text: var(--text-normal);
+  --sin-text-muted: var(--text-muted);
+  --sin-border: var(--background-modifier-border);
+  --sin-wave-color: var(--interactive-accent);
+  --sin-streak-color: #FF6B6B;
+  --sin-success-color: #4ECDC4;
+  --sin-schedule-color: #FFE66D;
+  --sin-radius: 8px;
+  --sin-radius-sm: 4px;
+}
+
+/* ============================================================
+   Wave View container
+   ============================================================ */
+
+.sin-wave-view {
+  position: relative;
+  overflow: hidden;
+  min-height: 100%;
+  container-type: inline-size;
+  container-name: sin-root;
+  background: var(--sin-bg);
+}
+
+/* ---- Canvas background ------------------------------------ */
+
+.sin-wave-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---- Scrollable content ----------------------------------- */
+
+.sin-content {
+  position: relative;
+  z-index: 1;
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ============================================================
+   Sections
+   ============================================================ */
+
+.sin-section {
+  background: var(--sin-bg-secondary);
+  border: 1px solid var(--sin-border);
+  border-radius: var(--sin-radius);
+  padding: 16px;
+}
+
+.sin-section-title {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--sin-text);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--sin-primary);
+}
+
+.sin-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sin-subsection-title {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--sin-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+/* ============================================================
+   Today grid — responsive via Container Queries
+   ============================================================ */
+
+.sin-today-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@container sin-root (min-width: 640px) {
+  .sin-today-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+}
+
+/* ============================================================
+   Habit list
+   ============================================================ */
+
+.sin-habit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sin-habit-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--sin-radius-sm);
+  background: var(--sin-bg);
+  border: 1px solid var(--sin-border);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  min-height: 44px; /* touch target */
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+/* Hover: pointer devices only */
+@media (hover: hover) and (pointer: fine) {
+  .sin-habit-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--sin-primary);
+  }
+}
+
+/* Touch feedback */
+@media (hover: none) {
+  .sin-habit-item:active {
+    background: var(--sin-bg-secondary);
+    transition: background 0.1s;
+  }
+}
+
+.sin-habit-item--done {
+  opacity: 0.65;
+}
+
+.sin-habit-item--done .sin-habit-name {
+  text-decoration: line-through;
+  color: var(--sin-text-muted);
+}
+
+/* ---- Checkbox -------------------------------------------- */
+
+.sin-checkbox {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--sin-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.sin-habit-item--done .sin-checkbox {
+  background: var(--sin-success-color);
+  border-color: var(--sin-success-color);
+}
+
+.sin-checkbox-check {
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ---- Habit info ------------------------------------------- */
+
+.sin-habit-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sin-habit-icon {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.sin-habit-name {
+  font-size: 0.95em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--sin-text);
+}
+
+/* ---- Streak ---------------------------------------------- */
+
+.sin-streak {
+  font-size: 0.78em;
+  color: var(--sin-streak-color);
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Hide streak on compact widths */
+@container sin-root (max-width: 400px) {
+  .sin-streak { display: none; }
+  .sin-section { padding: 8px; }
+}
+
+/* ============================================================
+   Schedule list
+   ============================================================ */
+
+.sin-schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sin-schedule-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--sin-radius-sm);
+  background: var(--sin-bg);
+  border: 1px solid var(--sin-border);
+  min-height: 40px;
+}
+
+.sin-schedule-item--done {
+  opacity: 0.55;
+  text-decoration: line-through;
+  color: var(--sin-text-muted);
+}
+
+.sin-schedule-time {
+  font-size: 0.85em;
+  color: var(--sin-schedule-color);
+  font-weight: 600;
+  min-width: 42px;
+  text-align: right;
+}
+
+.sin-schedule-icon {
+  font-size: 1em;
+}
+
+.sin-schedule-name {
+  font-size: 0.9em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sin-text);
+}
+
+/* ============================================================
+   Upcoming list
+   ============================================================ */
+
+.sin-upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sin-upcoming-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--sin-radius-sm);
+  background: var(--sin-bg);
+  border: 1px solid var(--sin-border);
+  min-height: 40px;
+}
+
+.sin-upcoming-date {
+  font-size: 0.82em;
+  color: var(--sin-text-muted);
+  min-width: 70px;
+  font-weight: 600;
+}
+
+.sin-upcoming-icon {
+  font-size: 1em;
+}
+
+.sin-upcoming-name {
+  font-size: 0.9em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sin-text);
+}
+
+.sin-upcoming-time {
+  font-size: 0.82em;
+  color: var(--sin-text-muted);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+
+.sin-empty {
+  font-size: 0.88em;
+  color: var(--sin-text-muted);
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* ============================================================
+   Action bar
+   ============================================================ */
+
+.sin-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  padding: 8px 0 16px;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+
+.sin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 18px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid transparent;
+  min-height: 44px;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.sin-btn--primary {
+  background: var(--sin-primary);
+  color: var(--text-on-accent);
+  border-color: var(--sin-primary);
+}
+
+.sin-btn--secondary {
+  background: transparent;
+  color: var(--sin-primary);
+  border-color: var(--sin-primary);
+}
+
+.sin-btn--ghost {
+  background: transparent;
+  color: var(--sin-text-muted);
+  border-color: var(--sin-border);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sin-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.sin-btn:active {
+  transform: scale(0.97);
+}
+
+/* ============================================================
+   Ripple effect
+   ============================================================ */
+
+.sin-ripple {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(0);
+  animation: sin-ripple-anim 0.6s linear;
+  pointer-events: none;
+  top: 50%;
+  left: 50%;
+  margin-top: -30px;
+  margin-left: -30px;
+}
+
+@keyframes sin-ripple-anim {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ============================================================
+   Reduced motion
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .sin-wave-canvas { display: none; }
+  .sin-ripple { display: none; }
+  .sin-btn { transition: none; }
+  .sin-habit-item { transition: none; }
+}
+
+/* ============================================================
+   Modal styles
+   ============================================================ */
+
+.sin-modal {
+  padding: 8px;
+}
+
+.sin-modal-title {
+  font-size: 1.2em;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--sin-text);
+}
+
+.sin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sin-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sin-form-label {
+  min-width: 130px;
+  font-size: 0.9em;
+  color: var(--sin-text-muted);
+  font-weight: 500;
+}
+
+.sin-input {
+  flex: 1;
+  min-width: 140px;
+  padding: 7px 10px;
+  border-radius: var(--sin-radius-sm);
+  border: 1px solid var(--sin-border);
+  background: var(--sin-bg);
+  color: var(--sin-text);
+  font-size: 0.9em;
+}
+
+.sin-input--short {
+  max-width: 100px;
+  flex: none;
+}
+
+.sin-input:focus {
+  outline: none;
+  border-color: var(--sin-primary);
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb, 100, 100, 200), 0.2);
+}
+
+.sin-select {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: var(--sin-radius-sm);
+  border: 1px solid var(--sin-border);
+  background: var(--sin-bg);
+  color: var(--sin-text);
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.sin-color-input {
+  width: 48px;
+  height: 36px;
+  border: 1px solid var(--sin-border);
+  border-radius: var(--sin-radius-sm);
+  padding: 2px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.sin-textarea {
+  flex: 1;
+  min-width: 140px;
+  min-height: 80px;
+  padding: 7px 10px;
+  border-radius: var(--sin-radius-sm);
+  border: 1px solid var(--sin-border);
+  background: var(--sin-bg);
+  color: var(--sin-text);
+  font-size: 0.9em;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.sin-checkbox-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* ---- Cycle option pickers -------------------------------- */
+
+.sin-cycle-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sin-day-picker,
+.sin-date-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sin-day-btn,
+.sin-date-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--sin-border);
+  background: var(--sin-bg);
+  color: var(--sin-text);
+  font-size: 0.82em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sin-day-btn--active,
+.sin-date-btn--active {
+  background: var(--sin-primary);
+  color: var(--text-on-accent);
+  border-color: var(--sin-primary);
+}
+
+.sin-date-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sin-radius-sm);
+}
+
+/* ---- Button row in forms --------------------------------- */
+
+.sin-btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sin-border);
+}
