@@ -9,6 +9,13 @@ import { ScheduleModal } from "../modals/schedule-modal";
 import { WaveIntro } from "./wave-intro";
 import type SinPlugin from "../main";
 
+// ── DEBUG flag: set true to enable diagnostic output ──────────
+const SIN_DEBUG = true;
+function dbg(...args: unknown[]): void {
+  if (SIN_DEBUG) console.log("[Sin]", ...args);
+}
+// ─────────────────────────────────────────────────────────────
+
 const DAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
 
 export class WaveView extends ItemView {
@@ -48,6 +55,10 @@ export class WaveView extends ItemView {
   // ----------------------------------------------------------
 
   async onOpen(): Promise<void> {
+    dbg("onOpen() called");
+    dbg("contentEl:", this.contentEl);
+    dbg("contentEl size:", this.contentEl?.clientWidth, "x", this.contentEl?.clientHeight);
+
     await this.fileManager.ensureFolders();
 
     // Phase 2: auto-generate today's log so habits appear even without a toggle
@@ -60,9 +71,12 @@ export class WaveView extends ItemView {
     await this.render();
 
     // Phase 2: wave intro animation (plays over the already-rendered content)
+    dbg("showIntroAnimation setting:", this.plugin.settings.showIntroAnimation);
     if (this.plugin.settings.showIntroAnimation) {
+      dbg("Starting WaveIntro on contentEl");
       const intro = new WaveIntro(this.contentEl);
       await intro.play();
+      dbg("WaveIntro finished");
     }
   }
 
@@ -79,9 +93,15 @@ export class WaveView extends ItemView {
     this.contentEl.empty();
     this.contentEl.addClass("sin-wave-view");
 
+    dbg("render(): contentEl size after empty+addClass:",
+      this.contentEl.clientWidth, "x", this.contentEl.clientHeight);
+    dbg("waveAnimationEnabled:", this.plugin.settings.waveAnimationEnabled);
+
     // Wave background canvas
     if (this.plugin.settings.waveAnimationEnabled) {
       this.canvas = this.contentEl.createEl("canvas", { cls: "sin-wave-canvas" });
+      dbg("canvas created, CSS size:",
+        this.canvas.clientWidth, "x", this.canvas.clientHeight);
       this.startWaveAnimation();
     }
 
@@ -324,9 +344,20 @@ export class WaveView extends ItemView {
     // first-render timing.
     const tryResize = (attempts = 0) => {
       this.resizeCanvas();
+      const w = this.canvas?.width ?? 0;
+      const h = this.canvas?.height ?? 0;
+      if (SIN_DEBUG && (attempts === 0 || attempts === 1 || w > 0)) {
+        dbg(`tryResize attempt=${attempts} canvas=${w}x${h}`,
+          "getBCR:", this.canvas?.getBoundingClientRect());
+      }
       // Keep retrying for up to ~2 seconds (120 frames at 60 fps)
-      if ((this.canvas?.width ?? 0) === 0 && attempts < 120) {
+      if (w === 0 && attempts < 120) {
         requestAnimationFrame(() => tryResize(attempts + 1));
+      } else if (w > 0) {
+        dbg("Canvas sized successfully:", w, "x", h, "after", attempts, "attempts");
+      } else {
+        dbg("Canvas sizing gave up after", attempts, "attempts — still 0x0");
+        new Notice("[Sin debug] canvas still 0×0 after 120 frames. Check console.");
       }
     };
     requestAnimationFrame(() => tryResize());
@@ -371,15 +402,30 @@ export class WaveView extends ItemView {
       .getPropertyValue("--interactive-accent")
       .trim() || "#7b6cd4";
 
+    // ── DEBUG: draw a bright diagonal line to confirm canvas is rendering ─
+    if (SIN_DEBUG) {
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = "#ff4444";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, height * 0.3);
+      ctx.lineTo(width, height * 0.7);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     // Reduce layers on small canvases (mobile / narrow pane)
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
 
     for (let i = 0; i < layerCount; i++) {
       const { amplitude, frequency, speed, opacity } = WAVE_LAYERS[i];
       ctx.beginPath();
-      ctx.globalAlpha = opacity;
+      // DEBUG: use higher opacity so waves are clearly visible
+      ctx.globalAlpha = SIN_DEBUG ? opacity * 8 : opacity;
       ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = SIN_DEBUG ? 3 : 2;
 
       for (let x = 0; x <= width; x++) {
         const y =

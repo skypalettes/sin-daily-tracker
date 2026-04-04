@@ -19,6 +19,8 @@ const PHASE1_END = 300;
 const PHASE2_END = 800;
 const PHASE3_END = 1200;
 
+function dbg(...args: unknown[]): void { console.log("[Sin Intro]", ...args); }
+
 export class WaveIntro {
   private overlay: HTMLElement;
   private canvas: HTMLCanvasElement;
@@ -32,9 +34,18 @@ export class WaveIntro {
   /** Play the animation. Resolves when the overlay has been removed. */
   play(): Promise<void> {
     return new Promise((resolve) => {
+      dbg("play() called");
+      dbg("overlay element:", this.overlay);
+      dbg("container:", this.container);
+      dbg("container size:", this.container.clientWidth, "x", this.container.clientHeight);
+
       // Bail out if the overlay is hidden by `prefers-reduced-motion` CSS.
       const style = getComputedStyle(this.overlay);
+      dbg("overlay computed display:", style.display,
+          "visibility:", style.visibility,
+          "opacity:", style.opacity);
       if (style.display === "none") {
+        dbg("Overlay hidden by prefers-reduced-motion — skipping intro");
         this.remove();
         resolve();
         return;
@@ -45,18 +56,27 @@ export class WaveIntro {
       // dimensions from `getBoundingClientRect()`.
       const tryStart = (attempts: number) => {
         this.sizeCanvas();
+        const w = this.canvas.width;
+        const h = this.canvas.height;
 
-        if (this.canvas.width === 0 || this.canvas.height === 0) {
+        if (attempts === 120 || attempts === 119 || w > 0) {
+          dbg(`tryStart attempts_left=${attempts} canvas=${w}x${h}`,
+              "overlay BCR:", this.overlay.getBoundingClientRect(),
+              "canvas BCR:", this.canvas.getBoundingClientRect());
+        }
+
+        if (w === 0 || h === 0) {
           if (attempts > 0) {
             this.rafId = requestAnimationFrame(() => tryStart(attempts - 1));
           } else {
-            // Canvas never got dimensions – skip the animation silently.
+            dbg("Canvas never got dimensions after 120 frames — skipping intro");
             this.remove();
             resolve();
           }
           return;
         }
 
+        dbg("Canvas ready", w, "x", h, "— starting animation");
         // We have real dimensions – start the animation.
         this.startAnimation(resolve);
       };
