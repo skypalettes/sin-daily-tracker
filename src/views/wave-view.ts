@@ -57,14 +57,12 @@ export class WaveView extends ItemView {
       // Non-fatal: best-effort log init
     }
 
+    await this.render();
+
+    // Phase 2: wave intro animation (plays over the already-rendered content)
     if (this.plugin.settings.showIntroAnimation) {
-      // Render content first (hidden behind overlay), then play intro.
-      await this.render();
-      const container = this.containerEl.children[1] as HTMLElement;
-      const intro = new WaveIntro(container);
+      const intro = new WaveIntro(this.contentEl);
       await intro.play();
-    } else {
-      await this.render();
     }
   }
 
@@ -77,18 +75,18 @@ export class WaveView extends ItemView {
   // ----------------------------------------------------------
 
   private async render(): Promise<void> {
-    const container = this.containerEl.children[1] as HTMLElement;
-    container.empty();
-    container.addClass("sin-wave-view");
+    // Use the official Obsidian ItemView contentEl, not containerEl.children[1]
+    this.contentEl.empty();
+    this.contentEl.addClass("sin-wave-view");
 
     // Wave background canvas
     if (this.plugin.settings.waveAnimationEnabled) {
-      this.canvas = container.createEl("canvas", { cls: "sin-wave-canvas" });
+      this.canvas = this.contentEl.createEl("canvas", { cls: "sin-wave-canvas" });
       this.startWaveAnimation();
     }
 
     // Scrollable content wrapper
-    const content = container.createDiv({ cls: "sin-content" });
+    const content = this.contentEl.createDiv({ cls: "sin-content" });
 
     // Today section
     const today = new Date();
@@ -260,7 +258,6 @@ export class WaveView extends ItemView {
     for (const schedule of upcoming) {
       const item = list.createDiv({ cls: "sin-upcoming-item" });
 
-      // Date label
       const dateEl = item.createSpan({ cls: "sin-upcoming-date" });
       dateEl.setText(formatUpcomingDate(schedule.date));
 
@@ -316,20 +313,23 @@ export class WaveView extends ItemView {
     // Disconnect any previous observer to avoid leaks across refreshes
     this.resizeObserver?.disconnect();
 
-    const canvasParent = this.canvas.parentElement ?? this.containerEl;
-    // Also observe the Obsidian view-content element (children[1]) which is
-    // guaranteed to have dimensions and reflects pane resize events.
-    const viewContent = this.containerEl.children[1] as HTMLElement | undefined;
-
+    // Observe contentEl (the Obsidian view-content element) — it reliably
+    // reflects pane resize events and always has layout dimensions.
     this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
-    this.resizeObserver.observe(canvasParent);
-    if (viewContent && viewContent !== canvasParent) {
-      this.resizeObserver.observe(viewContent);
-    }
+    this.resizeObserver.observe(this.contentEl);
 
-    // Defer the first resize to the next animation frame so the browser
-    // has performed layout before we read dimensions (avoids height=0).
-    requestAnimationFrame(() => this.resizeCanvas());
+    // `onOpen` may be called before the leaf is revealed (revealLeaf is called
+    // after setViewState). Retry resizing every frame until we get real
+    // dimensions — this handles both the "tab not yet active" case and normal
+    // first-render timing.
+    const tryResize = (attempts = 0) => {
+      this.resizeCanvas();
+      // Keep retrying for up to ~2 seconds (120 frames at 60 fps)
+      if ((this.canvas?.width ?? 0) === 0 && attempts < 120) {
+        requestAnimationFrame(() => tryResize(attempts + 1));
+      }
+    };
+    requestAnimationFrame(() => tryResize());
 
     const draw = () => {
       this.drawWaves();
@@ -341,14 +341,13 @@ export class WaveView extends ItemView {
 
   private resizeCanvas(): void {
     if (!this.canvas) return;
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
 
-    // getBoundingClientRect forces layout computation; fall back to the
-    // Obsidian pane element (containerEl) which always has defined dimensions.
-    const rect = parent.getBoundingClientRect();
-    const w = Math.round(rect.width) || this.containerEl.clientWidth || 400;
-    const h = Math.round(rect.height) || this.containerEl.clientHeight || 300;
+    // Read the CSS-rendered size of the canvas itself.
+    // The canvas has `width: 100%; height: 100%` in CSS, so this gives us
+    // exactly the dimensions we need regardless of parent reference issues.
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
 
     if (w > 0 && h > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
       this.canvas.width = w;
@@ -362,14 +361,17 @@ export class WaveView extends ItemView {
     if (!ctx) return;
 
     const { width, height } = this.canvas;
+    // Skip drawing if the canvas buffer hasn't been sized yet
+    if (width === 0 || height === 0) return;
+
     ctx.clearRect(0, 0, width, height);
 
     // Use CSS custom property for accent colour
-    const accentColor = getComputedStyle(this.containerEl)
+    const accentColor = getComputedStyle(this.contentEl)
       .getPropertyValue("--interactive-accent")
       .trim() || "#7b6cd4";
 
-    // Reduce layers on small canvases (mobile)
+    // Reduce layers on small canvases (mobile / narrow pane)
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
 
     for (let i = 0; i < layerCount; i++) {
