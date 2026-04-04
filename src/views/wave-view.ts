@@ -1,8 +1,8 @@
-import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, Menu } from "obsidian";
 import { SIN_VIEW_TYPE, WAVE_LAYERS } from "../constants";
 import { SinSettings, TodayHabit, Schedule } from "../types";
 import { SinFileManager } from "../services/file-manager";
-import { HabitTracker } from "../services/habit-tracker";
+import { HabitTracker, HabitStat } from "../services/habit-tracker";
 import { ScheduleManager } from "../services/schedule-manager";
 import { HabitModal } from "../modals/habit-modal";
 import { ScheduleModal } from "../modals/schedule-modal";
@@ -50,16 +50,15 @@ export class WaveView extends ItemView {
   async onOpen(): Promise<void> {
     await this.fileManager.ensureFolders();
 
-    // Phase 2: auto-generate today's log so habits appear even without a toggle
+    // Auto-generate today's log so habits appear even without a toggle
     try {
       await this.habitTracker.ensureTodayLog(new Date());
     } catch {
-      // Non-fatal: best-effort log init
+      // Non-fatal
     }
 
     await this.render();
 
-    // Phase 2: wave intro animation (plays over the already-rendered content)
     if (this.plugin.settings.showIntroAnimation) {
       const intro = new WaveIntro(this.contentEl);
       await intro.play();
@@ -84,15 +83,30 @@ export class WaveView extends ItemView {
       this.startWaveAnimation();
     }
 
-    // Scrollable content wrapper
     const content = this.contentEl.createDiv({ cls: "sin-content" });
+    const today = new Date();
+
+    // --- Performance: load all view data in parallel ---
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const weekStart = getWeekStart(today, this.plugin.settings.weekStartDay);
+
+    const [todayHabits, todaySchedules, upcomingSchedules] = await Promise.all([
+      this.habitTracker.getTodayHabits(today).catch(() => [] as TodayHabit[]),
+      this.scheduleManager.getTodaySchedules(today).catch(() => [] as Schedule[]),
+      this.scheduleManager
+        .getUpcoming(this.plugin.settings.upcomingDays, tomorrow)
+        .catch(() => [] as Schedule[]),
+    ]);
 
     // Today section
-    const today = new Date();
-    await this.renderTodaySection(content, today);
+    await this.renderTodaySection(content, today, todayHabits, todaySchedules);
 
-    // Upcoming section (next 14 days, excluding today)
-    await this.renderUpcomingSection(content, today);
+    // Upcoming section
+    this.renderUpcomingSection(content, upcomingSchedules);
+
+    // Summary section (weekly / monthly stats)
+    this.renderSummarySection(content, today, weekStart);
 
     // Action buttons
     this.renderActionButtons(content);
@@ -102,7 +116,12 @@ export class WaveView extends ItemView {
   // Today section
   // ----------------------------------------------------------
 
-  private async renderTodaySection(parent: HTMLElement, today: Date): Promise<void> {
+  private async renderTodaySection(
+    parent: HTMLElement,
+    today: Date,
+    todayHabits: TodayHabit[],
+    todaySchedules: Schedule[]
+  ): Promise<void> {
     const section = parent.createDiv({ cls: "sin-section sin-today-section" });
 
     // Title
@@ -113,31 +132,24 @@ export class WaveView extends ItemView {
     const dow = DAY_JA[today.getDay()];
     titleEl.setText(`今日  ${y}/${m}/${d} (${dow})`);
 
-    // Grid wrapper (responsive 2-col on wide screens)
     const grid = section.createDiv({ cls: "sin-today-grid" });
 
-    // Habits column
     const habitsCol = grid.createDiv({ cls: "sin-today-col" });
-    await this.renderHabitChecklist(habitsCol, today);
+    this.renderHabitChecklist(habitsCol, today, todayHabits);
 
-    // Schedules column
     const schedulesCol = grid.createDiv({ cls: "sin-today-col" });
-    await this.renderScheduleList(schedulesCol, today);
+    this.renderScheduleList(schedulesCol, todaySchedules);
   }
 
   // ---- Habit checklist -------------------------------------
 
-  private async renderHabitChecklist(parent: HTMLElement, today: Date): Promise<void> {
+  private renderHabitChecklist(
+    parent: HTMLElement,
+    today: Date,
+    todayHabits: TodayHabit[]
+  ): void {
     const wrapper = parent.createDiv({ cls: "sin-subsection" });
     wrapper.createDiv({ cls: "sin-subsection-title", text: "習慣" });
-
-    let todayHabits: TodayHabit[] = [];
-    try {
-      todayHabits = await this.habitTracker.getTodayHabits(today);
-    } catch (e) {
-      wrapper.createDiv({ cls: "sin-empty", text: "習慣の読み込みに失敗しました。" });
-      return;
-    }
 
     if (todayHabits.length === 0) {
       wrapper.createDiv({ cls: "sin-empty", text: "今日の習慣はありません。" });
@@ -151,33 +163,73 @@ export class WaveView extends ItemView {
         cls: `sin-habit-item${completed ? " sin-habit-item--done" : ""}`,
       });
 
-      // Checkbox
+      // Checkbox (click area: whole item minus the actions button)
       const checkbox = item.createDiv({ cls: "sin-checkbox" });
       if (completed) checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
 
-      // Icon + Name
       const info = item.createDiv({ cls: "sin-habit-info" });
       info.createSpan({ cls: "sin-habit-icon", text: habit.icon });
       info.createSpan({ cls: "sin-habit-name", text: habit.name });
 
-      // Streak
       if (this.plugin.settings.showStreaks && streak > 0) {
-        item.createDiv({
-          cls: "sin-streak",
-          text: `🔥 ${streak}日連続`,
-        });
+        item.createDiv({ cls: "sin-streak", text: `🔥 ${streak}日連続` });
       }
 
-      // Click handler
+      // ⋮ context menu button (edit / archive / delete)
+      const actions = item.createDiv({ cls: "sin-habit-actions" });
+      const menuBtn = actions.createEl("button", { cls: "sin-icon-btn", text: "⋮" });
+      menuBtn.setAttribute("aria-label", "操作");
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menu = new Menu();
+        menu.addItem((mi) =>
+          mi
+            .setTitle("編集")
+            .setIcon("pencil")
+            .onClick(() => {
+              new HabitModal(this.app, this.plugin, habit, () => this.refresh()).open();
+            })
+        );
+        menu.addItem((mi) =>
+          mi
+            .setTitle("アーカイブ")
+            .setIcon("archive")
+            .onClick(async () => {
+              try {
+                habit.archived = true;
+                await this.fileManager.writeHabit(habit);
+                new Notice(`習慣「${habit.name}」をアーカイブしました。`);
+                await this.refresh();
+              } catch {
+                new Notice("アーカイブに失敗しました。");
+              }
+            })
+        );
+        menu.addItem((mi) =>
+          mi
+            .setTitle("削除")
+            .setIcon("trash")
+            .onClick(async () => {
+              try {
+                await this.fileManager.deleteHabit(habit);
+                new Notice(`習慣「${habit.name}」を削除しました。`);
+                await this.refresh();
+              } catch {
+                new Notice("削除に失敗しました。");
+              }
+            })
+        );
+        menu.showAtMouseEvent(e);
+      });
+
+      // Toggle completion on item click (excluding menu button)
       item.addEventListener("click", async () => {
         try {
           const nowCompleted = await this.habitTracker.toggleCompletion(habit, today);
           item.toggleClass("sin-habit-item--done", nowCompleted);
           if (nowCompleted) {
-            // Checkmark enters with a scale animation (CSS @keyframes)
             checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
           } else {
-            // Checkmark exits with a scale-out animation before removal
             const check = checkbox.querySelector(".sin-checkbox-check");
             if (check instanceof HTMLElement) {
               check.addClass("sin-checkbox-check--exit");
@@ -187,26 +239,18 @@ export class WaveView extends ItemView {
             }
           }
           this.ripple(item);
-        } catch (e) {
+        } catch {
           new Notice("習慣の更新に失敗しました。");
         }
       });
     }
   }
 
-  // ---- Schedule list ---------------------------------------
+  // ---- Schedule list (today) --------------------------------
 
-  private async renderScheduleList(parent: HTMLElement, today: Date): Promise<void> {
+  private renderScheduleList(parent: HTMLElement, schedules: Schedule[]): void {
     const wrapper = parent.createDiv({ cls: "sin-subsection" });
     wrapper.createDiv({ cls: "sin-subsection-title", text: "予定" });
-
-    let schedules: Schedule[] = [];
-    try {
-      schedules = await this.scheduleManager.getTodaySchedules(today);
-    } catch (e) {
-      wrapper.createDiv({ cls: "sin-empty", text: "予定の読み込みに失敗しました。" });
-      return;
-    }
 
     if (schedules.length === 0) {
       wrapper.createDiv({ cls: "sin-empty", text: "今日の予定はありません。" });
@@ -215,38 +259,62 @@ export class WaveView extends ItemView {
 
     const list = wrapper.createDiv({ cls: "sin-schedule-list" });
     for (const schedule of schedules) {
-      const item = list.createDiv({
-        cls: `sin-schedule-item${schedule.done ? " sin-schedule-item--done" : ""}`,
-      });
-
-      const timeEl = item.createSpan({ cls: "sin-schedule-time" });
-      timeEl.setText(schedule.allDay ? "終日" : (schedule.time ?? ""));
-
-      item.createSpan({ cls: "sin-schedule-icon", text: schedule.icon });
-      item.createSpan({ cls: "sin-schedule-name", text: schedule.name });
+      this.renderScheduleItem(list, schedule, true);
     }
+  }
+
+  private renderScheduleItem(
+    parent: HTMLElement,
+    schedule: Schedule,
+    showDoneToggle: boolean
+  ): HTMLElement {
+    const item = parent.createDiv({
+      cls: `sin-schedule-item${schedule.done ? " sin-schedule-item--done" : ""}`,
+    });
+
+    // Done toggle circle
+    if (showDoneToggle) {
+      const doneBtn = item.createEl("button", { cls: "sin-schedule-done-btn" });
+      doneBtn.setAttribute("aria-label", schedule.done ? "未完了に戻す" : "完了にする");
+      if (schedule.done) doneBtn.setText("✓");
+      doneBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          const nowDone = await this.scheduleManager.toggleDone(schedule);
+          item.toggleClass("sin-schedule-item--done", nowDone);
+          doneBtn.setText(nowDone ? "✓" : "");
+          doneBtn.setAttribute("aria-label", nowDone ? "未完了に戻す" : "完了にする");
+        } catch {
+          new Notice("予定の更新に失敗しました。");
+        }
+      });
+    }
+
+    const timeEl = item.createSpan({ cls: "sin-schedule-time" });
+    timeEl.setText(schedule.allDay ? "終日" : (schedule.time ?? ""));
+
+    item.createSpan({ cls: "sin-schedule-icon", text: schedule.icon });
+    item.createSpan({ cls: "sin-schedule-name", text: schedule.name });
+
+    // Edit button
+    const editBtn = item.createEl("button", { cls: "sin-icon-btn sin-schedule-edit-btn" });
+    editBtn.setText("✎");
+    editBtn.setAttribute("aria-label", "編集");
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      new ScheduleModal(this.app, this.plugin, schedule, () => this.refresh()).open();
+    });
+
+    return item;
   }
 
   // ----------------------------------------------------------
   // Upcoming section
   // ----------------------------------------------------------
 
-  private async renderUpcomingSection(parent: HTMLElement, today: Date): Promise<void> {
+  private renderUpcomingSection(parent: HTMLElement, upcoming: Schedule[]): void {
     const section = parent.createDiv({ cls: "sin-section sin-upcoming-section" });
     section.createDiv({ cls: "sin-section-title", text: "今後の予定" });
-
-    let upcoming: Schedule[] = [];
-    try {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      upcoming = await this.scheduleManager.getUpcoming(
-        this.plugin.settings.upcomingDays,
-        tomorrow
-      );
-    } catch (e) {
-      section.createDiv({ cls: "sin-empty", text: "予定の読み込みに失敗しました。" });
-      return;
-    }
 
     if (upcoming.length === 0) {
       section.createDiv({ cls: "sin-empty", text: "今後の予定はありません。" });
@@ -257,15 +325,125 @@ export class WaveView extends ItemView {
     for (const schedule of upcoming) {
       const item = list.createDiv({ cls: "sin-upcoming-item" });
 
-      const dateEl = item.createSpan({ cls: "sin-upcoming-date" });
-      dateEl.setText(formatUpcomingDate(schedule.date));
-
+      item.createSpan({ cls: "sin-upcoming-date", text: formatUpcomingDate(schedule.date) });
       item.createSpan({ cls: "sin-upcoming-icon", text: schedule.icon });
       item.createSpan({ cls: "sin-upcoming-name", text: schedule.name });
 
       if (schedule.time) {
         item.createSpan({ cls: "sin-upcoming-time", text: schedule.time });
       }
+
+      // Edit button
+      const editBtn = item.createEl("button", { cls: "sin-icon-btn sin-upcoming-edit-btn" });
+      editBtn.setText("✎");
+      editBtn.setAttribute("aria-label", "編集");
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        new ScheduleModal(this.app, this.plugin, schedule, () => this.refresh()).open();
+      });
+    }
+  }
+
+  // ----------------------------------------------------------
+  // Summary section (Phase 3)
+  // ----------------------------------------------------------
+
+  private renderSummarySection(
+    parent: HTMLElement,
+    today: Date,
+    weekStart: Date
+  ): void {
+    const section = parent.createDiv({ cls: "sin-section sin-summary-section" });
+
+    const titleRow = section.createDiv({ cls: "sin-summary-title-row" });
+    titleRow.createDiv({ cls: "sin-section-title", text: "サマリー" });
+
+    // Tab buttons
+    const tabBar = titleRow.createDiv({ cls: "sin-summary-tabs" });
+    const weeklyBtn = tabBar.createEl("button", {
+      cls: "sin-tab-btn sin-tab-btn--active",
+      text: "週間",
+    });
+    const monthlyBtn = tabBar.createEl("button", {
+      cls: "sin-tab-btn",
+      text: "月間",
+    });
+
+    const statsContainer = section.createDiv({ cls: "sin-stats-container" });
+
+    const renderWeekly = async () => {
+      statsContainer.empty();
+      weeklyBtn.addClass("sin-tab-btn--active");
+      monthlyBtn.removeClass("sin-tab-btn--active");
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const range = `${formatShortDate(weekStart)}〜${formatShortDate(weekEnd)}`;
+      statsContainer.createDiv({ cls: "sin-stats-range", text: range });
+
+      try {
+        const stats = await this.habitTracker.getWeeklyStats(weekStart);
+        if (stats.length === 0) {
+          statsContainer.createDiv({ cls: "sin-empty", text: "集計できる習慣がありません。" });
+          return;
+        }
+        this.renderStatsItems(statsContainer, stats);
+      } catch {
+        statsContainer.createDiv({ cls: "sin-empty", text: "統計の読み込みに失敗しました。" });
+      }
+    };
+
+    const renderMonthly = async () => {
+      statsContainer.empty();
+      monthlyBtn.addClass("sin-tab-btn--active");
+      weeklyBtn.removeClass("sin-tab-btn--active");
+
+      const year = today.getFullYear();
+      const month = today.getMonth() + 1;
+      statsContainer.createDiv({
+        cls: "sin-stats-range",
+        text: `${year}/${String(month).padStart(2, "0")}`,
+      });
+
+      try {
+        const stats = await this.habitTracker.getMonthlyStats(year, month);
+        if (stats.length === 0) {
+          statsContainer.createDiv({ cls: "sin-empty", text: "集計できる習慣がありません。" });
+          return;
+        }
+        this.renderStatsItems(statsContainer, stats);
+      } catch {
+        statsContainer.createDiv({ cls: "sin-empty", text: "統計の読み込みに失敗しました。" });
+      }
+    };
+
+    weeklyBtn.addEventListener("click", () => renderWeekly());
+    monthlyBtn.addEventListener("click", () => renderMonthly());
+
+    // Initial render (async, fire-and-forget — section skeleton already in DOM)
+    renderWeekly();
+  }
+
+  private renderStatsItems(container: HTMLElement, stats: HabitStat[]): void {
+    const list = container.createDiv({ cls: "sin-stats-list" });
+
+    for (const { habit, completed, scheduled, rate } of stats) {
+      const item = list.createDiv({ cls: "sin-stat-item" });
+
+      const labelEl = item.createDiv({ cls: "sin-stat-label" });
+      labelEl.createSpan({ cls: "sin-habit-icon", text: habit.icon });
+      labelEl.createSpan({ cls: "sin-habit-name sin-stat-habit-name", text: habit.name });
+
+      const barWrapper = item.createDiv({ cls: "sin-stat-bar-wrapper" });
+      const bar = barWrapper.createDiv({ cls: "sin-stat-bar" });
+      const fill = bar.createDiv({ cls: "sin-stat-bar-fill" });
+      // Delay width assignment slightly so CSS transition can play
+      requestAnimationFrame(() => { fill.style.width = `${rate}%`; });
+
+      item.createDiv({
+        cls: "sin-stat-value",
+        text: `${completed}/${scheduled} (${rate}%)`,
+      });
     }
   }
 
@@ -309,23 +487,18 @@ export class WaveView extends ItemView {
   private startWaveAnimation(): void {
     if (!this.canvas) return;
 
-    // Disconnect any previous observer to avoid leaks across refreshes
     this.resizeObserver?.disconnect();
 
-    // Observe contentEl — it reliably reflects pane resize events
     this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
     this.resizeObserver.observe(this.contentEl);
 
-    // `onOpen` may be called before the leaf is revealed (revealLeaf is called
-    // after setViewState). Retry resizing every frame until we get real
-    // dimensions. The canvas has `width:100%; height:100%` CSS so
-    // getBoundingClientRect() on the canvas itself is the most reliable way
-    // to get the rendered size.
     const tryResize = (attempts = 0) => {
       this.resizeCanvas();
-      if ((this.canvas?.width ?? 0) <= 300 &&
-          (this.canvas?.getBoundingClientRect().width ?? 0) === 0 &&
-          attempts < 120) {
+      if (
+        (this.canvas?.width ?? 0) <= 300 &&
+        (this.canvas?.getBoundingClientRect().width ?? 0) === 0 &&
+        attempts < 120
+      ) {
         requestAnimationFrame(() => tryResize(attempts + 1));
       }
     };
@@ -341,14 +514,9 @@ export class WaveView extends ItemView {
 
   private resizeCanvas(): void {
     if (!this.canvas) return;
-
-    // Read the CSS-rendered size of the canvas itself.
-    // The canvas has `width: 100%; height: 100%` CSS so this gives us
-    // exactly the container dimensions.
     const rect = this.canvas.getBoundingClientRect();
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
-
     if (w > 0 && h > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
       this.canvas.width = w;
       this.canvas.height = h;
@@ -361,17 +529,15 @@ export class WaveView extends ItemView {
     if (!ctx) return;
 
     const { width, height } = this.canvas;
-    // Skip drawing until the canvas buffer has been properly sized
     if (width <= 300 && height <= 150) return;
 
     ctx.clearRect(0, 0, width, height);
 
-    // Use CSS custom property for accent colour
-    const accentColor = getComputedStyle(this.contentEl)
-      .getPropertyValue("--interactive-accent")
-      .trim() || "#7b6cd4";
+    const accentColor =
+      getComputedStyle(this.contentEl)
+        .getPropertyValue("--interactive-accent")
+        .trim() || "#7b6cd4";
 
-    // Reduce layers on small canvases (mobile / narrow pane)
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
 
     for (let i = 0; i < layerCount; i++) {
@@ -384,8 +550,7 @@ export class WaveView extends ItemView {
       for (let x = 0; x <= width; x++) {
         const y =
           height / 2 +
-          amplitude *
-            Math.sin(frequency * x + this.waveOffset * speed * 60);
+          amplitude * Math.sin(frequency * x + this.waveOffset * speed * 60);
         if (x === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -424,4 +589,23 @@ function formatUpcomingDate(dateStr: string): string {
   const day = String(d.getDate()).padStart(2, "0");
   const dow = DAY_JA[d.getDay()];
   return `${m}/${day} (${dow})`;
+}
+
+function formatShortDate(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${m}/${day}`;
+}
+
+/**
+ * Returns the start of the week containing `today`, respecting
+ * `weekStartDay` (0 = Sun, 1 = Mon, …).
+ */
+function getWeekStart(today: Date, weekStartDay: number): Date {
+  const d = new Date(today);
+  d.setHours(0, 0, 0, 0);
+  let diff = d.getDay() - weekStartDay;
+  if (diff < 0) diff += 7;
+  d.setDate(d.getDate() - diff);
+  return d;
 }

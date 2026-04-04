@@ -2,6 +2,15 @@ import { Habit, TodayHabit, LogEntry } from "../types";
 import { isHabitScheduledOn } from "../models/habit";
 import { SinFileManager } from "./file-manager";
 
+// ---- Stats types -----------------------------------------
+
+export interface HabitStat {
+  habit: Habit;
+  completed: number;
+  scheduled: number;
+  rate: number; // 0-100
+}
+
 export class HabitTracker {
   constructor(private fileManager: SinFileManager) {}
 
@@ -106,6 +115,73 @@ export class HabitTracker {
     }
 
     return streak;
+  }
+
+  // ---- Weekly / Monthly stats (Phase 3) -------------------
+
+  /**
+   * Returns completion stats for all active habits over the 7-day week
+   * starting at weekStart.
+   */
+  async getWeeklyStats(weekStart: Date): Promise<HabitStat[]> {
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    return this.getStatsForRange(weekStart, weekEnd);
+  }
+
+  /**
+   * Returns completion stats for all active habits over the given calendar month.
+   */
+  async getMonthlyStats(year: number, month: number): Promise<HabitStat[]> {
+    const from = new Date(year, month - 1, 1);
+    const to = new Date(year, month, 0); // last day of month
+    return this.getStatsForRange(from, to);
+  }
+
+  private async getStatsForRange(from: Date, to: Date): Promise<HabitStat[]> {
+    const habits = await this.fileManager.readHabits();
+    const active = habits.filter((h) => !h.archived);
+
+    // Collect distinct months in range and load their logs in parallel
+    const months = new Set<string>();
+    const cur = new Date(from);
+    cur.setHours(0, 0, 0, 0);
+    const end = new Date(to);
+    end.setHours(0, 0, 0, 0);
+    while (cur <= end) {
+      months.add(dateString(cur).slice(0, 7));
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    const logArrays = await Promise.all([...months].map((m) => this.fileManager.readLog(m)));
+    const allLogs: LogEntry[] = logArrays.flat();
+
+    const results: HabitStat[] = [];
+
+    for (const habit of active) {
+      let scheduled = 0;
+      let completed = 0;
+      const c = new Date(from);
+      c.setHours(0, 0, 0, 0);
+      const e = new Date(to);
+      e.setHours(0, 0, 0, 0);
+      while (c <= e) {
+        if (isHabitScheduledOn(habit, c)) {
+          scheduled++;
+          const dayStr = dateString(c);
+          const log = allLogs.find(
+            (l) => l.date === dayStr && l.habitName === habit.name
+          );
+          if (log?.completed) completed++;
+        }
+        c.setDate(c.getDate() + 1);
+      }
+      if (scheduled === 0) continue;
+      const rate = Math.round((completed / scheduled) * 100);
+      results.push({ habit, completed, scheduled, rate });
+    }
+
+    return results;
   }
 
   // ---- Auto-generate today's log (Phase 2) -----------------

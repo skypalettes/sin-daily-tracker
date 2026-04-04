@@ -654,3 +654,194 @@
   padding-top: 12px;
   border-top: 1px solid var(--sin-border);
 }
+
+/* ============================================================
+   Phase 3: Icon buttons (edit / context menu)
+   ============================================================ */
+
+.sin-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--sin-radius-sm);
+  color: var(--sin-text-muted);
+  font-size: 1em;
+  min-width: 26px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sin-icon-btn:hover {
+    background: var(--sin-border);
+    color: var(--sin-text);
+  }
+}
+
+/* ---- Habit item actions ----------------------------------- */
+
+.sin-habit-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ---- Schedule done button -------------------------------- */
+
+.sin-schedule-done-btn {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--sin-border);
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.7em;
+  color: transparent;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  padding: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sin-schedule-done-btn:hover {
+    border-color: var(--sin-success-color);
+    color: var(--sin-success-color);
+  }
+}
+
+.sin-schedule-item--done .sin-schedule-done-btn {
+  border-color: var(--sin-success-color);
+  background: var(--sin-success-color);
+  color: #fff;
+}
+
+/* Edit buttons on schedule / upcoming items */
+.sin-schedule-edit-btn,
+.sin-upcoming-edit-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   Phase 3: Summary section
+   ============================================================ */
+
+.sin-summary-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sin-summary-title-row .sin-section-title {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.sin-summary-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.sin-tab-btn {
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--sin-border);
+  background: transparent;
+  color: var(--sin-text-muted);
+  font-size: 0.82em;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 28px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.sin-tab-btn--active {
+  background: var(--sin-primary);
+  color: var(--text-on-accent);
+  border-color: var(--sin-primary);
+}
+
+.sin-stats-range {
+  font-size: 0.82em;
+  color: var(--sin-text-muted);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.sin-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sin-stat-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.sin-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sin-stat-habit-name {
+  font-size: 0.88em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sin-stat-bar-wrapper {
+  min-width: 0;
+}
+
+.sin-stat-bar {
+  height: 8px;
+  background: var(--sin-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sin-stat-bar-fill {
+  height: 100%;
+  background: var(--sin-primary);
+  border-radius: 4px;
+  width: 0;
+  transition: width 0.5s ease;
+}
+
+.sin-stat-value {
+  font-size: 0.78em;
+  color: var(--sin-text-muted);
+  white-space: nowrap;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Compact: collapse stat grid to 2 columns */
+@container sin-root (max-width: 400px) {
+  .sin-stat-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+  }
+  .sin-stat-bar-wrapper {
+    grid-column: 1 / -1;
+  }
+}
