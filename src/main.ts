@@ -57,6 +57,11 @@ export default class SinPlugin extends Plugin {
 
     // Settings tab
     this.addSettingTab(new SinSettingTab(this.app, this));
+
+    // URI protocol handler: obsidian://sin-open-wave-view
+    this.registerObsidianProtocolHandler("sin-open-wave-view", () => {
+      this.activateView();
+    });
   }
 
   onunload(): void {

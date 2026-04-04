@@ -31,6 +31,13 @@ export class ScheduleManager {
     schedule.done = true;
     await this.fileManager.writeSchedule(schedule);
   }
+
+  /** Toggle the done flag and persist. Returns the new done state. */
+  async toggleDone(schedule: Schedule): Promise<boolean> {
+    schedule.done = !schedule.done;
+    await this.fileManager.writeSchedule(schedule);
+    return schedule.done;
+  }
 }
 
 function dateString(d: Date): string {

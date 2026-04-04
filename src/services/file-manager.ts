@@ -127,9 +127,24 @@ export class SinFileManager {
     return habits;
   }
 
-  async writeHabit(habit: Habit, body = ""): Promise<void> {
+  async writeHabit(habit: Habit, body?: string): Promise<void> {
     await this.ensureFolders();
-    const content = serializeHabit(habit, body);
+
+    let bodyContent = body ?? "";
+
+    // When no explicit body is provided and the file already exists,
+    // preserve whatever the user wrote below the frontmatter.
+    if (body === undefined) {
+      const existingFile = this.app.vault.getAbstractFileByPath(habit.filePath);
+      if (existingFile instanceof TFile) {
+        const existing = await this.app.vault.read(existingFile);
+        const { body: parsedBody } = parseFrontmatter(existing);
+        // Strip the auto-generated H1 heading (serializeHabit re-adds it)
+        bodyContent = parsedBody.replace(/^#[^\n]*\n?/, "").trim();
+      }
+    }
+
+    const content = serializeHabit(habit, bodyContent);
 
     const existingFile = this.app.vault.getAbstractFileByPath(habit.filePath);
     if (existingFile instanceof TFile) {
