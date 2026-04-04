@@ -108,6 +108,36 @@ export class HabitTracker {
     return streak;
   }
 
+  // ---- Auto-generate today's log (Phase 2) -----------------
+
+  /**
+   * Ensures a log entry exists for every habit scheduled today.
+   * Called when Wave View opens so the log file reflects the day's
+   * habits even if the user never taps a checkbox.
+   * Safe to call multiple times — skips when entries already exist.
+   */
+  async ensureTodayLog(today: Date = new Date()): Promise<void> {
+    const dateStr = dateString(today);
+    const month = dateStr.slice(0, 7);
+
+    // If any log entry already exists for today, nothing to do.
+    const existing = await this.fileManager.readLog(month);
+    if (existing.some((l) => l.date === dateStr)) return;
+
+    const allHabits = await this.fileManager.readHabits();
+    const todayHabits = allHabits.filter((h) => isHabitScheduledOn(h, today));
+    if (todayHabits.length === 0) return;
+
+    const entries: LogEntry[] = todayHabits.map((h) => ({
+      date: dateStr,
+      habitName: h.name,
+      habitIcon: h.icon,
+      completed: false,
+    }));
+
+    await this.fileManager.writeLog(dateStr, entries);
+  }
+
   // ---- Private helpers -------------------------------------
 
   private async collectRecentLogs(today: Date, days: number): Promise<LogEntry[]> {

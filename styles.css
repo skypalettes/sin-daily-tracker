@@ -423,14 +423,82 @@
 }
 
 /* ============================================================
+   Wave Intro Overlay  (Phase 2)
+   ============================================================ */
+
+.sin-wave-intro-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--sin-bg);
+  pointer-events: none;
+}
+
+.sin-wave-intro-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================
+   Checkbox toggle animations  (Phase 2)
+   ============================================================ */
+
+/* Entering: checkmark scales in with a springy overshoot */
+.sin-checkbox-check {
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-block;
+  animation: sin-check-enter 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.4) both;
+}
+
+@keyframes sin-check-enter {
+  from {
+    transform: scale(0) rotate(-15deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Exiting: checkmark scales out */
+.sin-checkbox-check--exit {
+  animation: sin-check-exit 0.18s ease-in forwards;
+}
+
+@keyframes sin-check-exit {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+/* ============================================================
    Reduced motion
+   ============================================================
+   NOTE: canvas wave animation and intro overlay are controlled
+   exclusively by the plugin settings (waveAnimationEnabled /
+   showIntroAnimation). We do NOT hide them via CSS so that
+   `display: none` never forces getBoundingClientRect() to return
+   0 and never overrides the user's explicit plugin preferences.
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .sin-wave-canvas { display: none; }
+  /* Canvas and overlay: keep in layout — JS settings control visibility */
   .sin-ripple { display: none; }
   .sin-btn { transition: none; }
   .sin-habit-item { transition: none; }
+  .sin-checkbox-check { animation: none; }
+  .sin-checkbox-check--exit { animation: none; }
 }
 
 /* ============================================================

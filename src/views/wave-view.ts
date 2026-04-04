@@ -6,6 +6,7 @@ import { HabitTracker } from "../services/habit-tracker";
 import { ScheduleManager } from "../services/schedule-manager";
 import { HabitModal } from "../modals/habit-modal";
 import { ScheduleModal } from "../modals/schedule-modal";
+import { WaveIntro } from "./wave-intro";
 import type SinPlugin from "../main";
 
 const DAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
@@ -20,6 +21,7 @@ export class WaveView extends ItemView {
   private canvas: HTMLCanvasElement | null = null;
   private animFrameId: number | null = null;
   private waveOffset = 0;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SinPlugin) {
     super(leaf);
@@ -47,7 +49,21 @@ export class WaveView extends ItemView {
 
   async onOpen(): Promise<void> {
     await this.fileManager.ensureFolders();
-    this.render();
+
+    // Phase 2: auto-generate today's log so habits appear even without a toggle
+    try {
+      await this.habitTracker.ensureTodayLog(new Date());
+    } catch {
+      // Non-fatal: best-effort log init
+    }
+
+    await this.render();
+
+    // Phase 2: wave intro animation (plays over the already-rendered content)
+    if (this.plugin.settings.showIntroAnimation) {
+      const intro = new WaveIntro(this.contentEl);
+      await intro.play();
+    }
   }
 
   async onClose(): Promise<void> {
@@ -59,18 +75,17 @@ export class WaveView extends ItemView {
   // ----------------------------------------------------------
 
   private async render(): Promise<void> {
-    const container = this.containerEl.children[1] as HTMLElement;
-    container.empty();
-    container.addClass("sin-wave-view");
+    this.contentEl.empty();
+    this.contentEl.addClass("sin-wave-view");
 
     // Wave background canvas
     if (this.plugin.settings.waveAnimationEnabled) {
-      this.canvas = container.createEl("canvas", { cls: "sin-wave-canvas" });
+      this.canvas = this.contentEl.createEl("canvas", { cls: "sin-wave-canvas" });
       this.startWaveAnimation();
     }
 
     // Scrollable content wrapper
-    const content = container.createDiv({ cls: "sin-content" });
+    const content = this.contentEl.createDiv({ cls: "sin-content" });
 
     // Today section
     const today = new Date();
@@ -159,9 +174,17 @@ export class WaveView extends ItemView {
           const nowCompleted = await this.habitTracker.toggleCompletion(habit, today);
           item.toggleClass("sin-habit-item--done", nowCompleted);
           if (nowCompleted) {
+            // Checkmark enters with a scale animation (CSS @keyframes)
             checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
           } else {
-            checkbox.empty();
+            // Checkmark exits with a scale-out animation before removal
+            const check = checkbox.querySelector(".sin-checkbox-check");
+            if (check instanceof HTMLElement) {
+              check.addClass("sin-checkbox-check--exit");
+              setTimeout(() => checkbox.empty(), 200);
+            } else {
+              checkbox.empty();
+            }
           }
           this.ripple(item);
         } catch (e) {
@@ -234,7 +257,6 @@ export class WaveView extends ItemView {
     for (const schedule of upcoming) {
       const item = list.createDiv({ cls: "sin-upcoming-item" });
 
-      // Date label
       const dateEl = item.createSpan({ cls: "sin-upcoming-date" });
       dateEl.setText(formatUpcomingDate(schedule.date));
 
@@ -287,9 +309,27 @@ export class WaveView extends ItemView {
   private startWaveAnimation(): void {
     if (!this.canvas) return;
 
-    const resizeObserver = new ResizeObserver(() => this.resizeCanvas());
-    resizeObserver.observe(this.containerEl);
-    this.resizeCanvas();
+    // Disconnect any previous observer to avoid leaks across refreshes
+    this.resizeObserver?.disconnect();
+
+    // Observe contentEl — it reliably reflects pane resize events
+    this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
+    this.resizeObserver.observe(this.contentEl);
+
+    // `onOpen` may be called before the leaf is revealed (revealLeaf is called
+    // after setViewState). Retry resizing every frame until we get real
+    // dimensions. The canvas has `width:100%; height:100%` CSS so
+    // getBoundingClientRect() on the canvas itself is the most reliable way
+    // to get the rendered size.
+    const tryResize = (attempts = 0) => {
+      this.resizeCanvas();
+      if ((this.canvas?.width ?? 0) <= 300 &&
+          (this.canvas?.getBoundingClientRect().width ?? 0) === 0 &&
+          attempts < 120) {
+        requestAnimationFrame(() => tryResize(attempts + 1));
+      }
+    };
+    requestAnimationFrame(() => tryResize());
 
     const draw = () => {
       this.drawWaves();
@@ -301,10 +341,18 @@ export class WaveView extends ItemView {
 
   private resizeCanvas(): void {
     if (!this.canvas) return;
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
-    this.canvas.width = parent.clientWidth;
-    this.canvas.height = parent.clientHeight;
+
+    // Read the CSS-rendered size of the canvas itself.
+    // The canvas has `width: 100%; height: 100%` CSS so this gives us
+    // exactly the container dimensions.
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+
+    if (w > 0 && h > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
   }
 
   private drawWaves(): void {
@@ -313,14 +361,17 @@ export class WaveView extends ItemView {
     if (!ctx) return;
 
     const { width, height } = this.canvas;
+    // Skip drawing until the canvas buffer has been properly sized
+    if (width <= 300 && height <= 150) return;
+
     ctx.clearRect(0, 0, width, height);
 
     // Use CSS custom property for accent colour
-    const accentColor = getComputedStyle(this.containerEl)
+    const accentColor = getComputedStyle(this.contentEl)
       .getPropertyValue("--interactive-accent")
       .trim() || "#7b6cd4";
 
-    // Reduce layers on small canvases (mobile)
+    // Reduce layers on small canvases (mobile / narrow pane)
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
 
     for (let i = 0; i < layerCount; i++) {
@@ -349,6 +400,8 @@ export class WaveView extends ItemView {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
   }
 
   // ----------------------------------------------------------
