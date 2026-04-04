@@ -40,94 +40,100 @@ export class WaveIntro {
         return;
       }
 
-      this.sizeCanvas();
+      // Defer to the next animation frame so the browser has performed
+      // layout before we read dimensions (avoids sizeCanvas returning 0).
+      requestAnimationFrame(() => {
+        this.sizeCanvas();
 
-      const ctx = this.canvas.getContext("2d");
-      if (!ctx) {
-        this.remove();
-        resolve();
-        return;
-      }
-
-      const accent =
-        getComputedStyle(this.container)
-          .getPropertyValue("--interactive-accent")
-          .trim() || "#7b6cd4";
-
-      const { width, height } = this.canvas;
-      const cx = width / 2;
-      const cy = height / 2;
-      const start = performance.now();
-
-      const tick = (now: number) => {
-        const t = now - start;
-        ctx.clearRect(0, 0, width, height);
-
-        if (t < PHASE1_END) {
-          // ── Phase 1: line extends from centre ────────────────
-          const p = t / PHASE1_END;
-          const halfLen = p * width * 0.6;
-
-          ctx.beginPath();
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = accent;
-          ctx.lineWidth = 2;
-          ctx.moveTo(cx - halfLen, cy);
-          ctx.lineTo(cx + halfLen, cy);
-          ctx.stroke();
-          this.overlay.style.opacity = "1";
-
-        } else if (t < PHASE2_END) {
-          // ── Phase 2: sine wave grows ──────────────────────────
-          const p = (t - PHASE1_END) / (PHASE2_END - PHASE1_END);
-          const amplitude = p * 35;
-          const frequency = 0.025;
-          const offset = t * 0.003;
-
-          ctx.beginPath();
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = accent;
-          ctx.lineWidth = 2;
-
-          for (let x = 0; x <= width; x++) {
-            const y = cy + amplitude * Math.sin(frequency * x + offset);
-            x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-          this.overlay.style.opacity = "1";
-
-        } else if (t < PHASE3_END) {
-          // ── Phase 3: wave expands and overlay fades ───────────
-          const p = (t - PHASE2_END) / (PHASE3_END - PHASE2_END);
-          const amplitude = 35 + p * 80;
-          const frequency = Math.max(0.01, 0.025 - p * 0.01);
-          const offset = t * 0.003;
-          const alpha = 1 - p;
-
-          this.overlay.style.opacity = String(alpha);
-
-          ctx.beginPath();
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = accent;
-          ctx.lineWidth = 2 + p;
-
-          for (let x = 0; x <= width; x++) {
-            const y = cy + amplitude * Math.sin(frequency * x + offset);
-            x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-
-        } else {
-          // ── Done ──────────────────────────────────────────────
+        const ctx = this.canvas.getContext("2d");
+        // Bail out if canvas still has no area (e.g. collapsed pane).
+        if (!ctx || this.canvas.width === 0 || this.canvas.height === 0) {
           this.remove();
           resolve();
           return;
         }
 
-        this.rafId = requestAnimationFrame(tick);
-      };
+        const accent =
+          getComputedStyle(this.container)
+            .getPropertyValue("--interactive-accent")
+            .trim() || "#7b6cd4";
 
-      this.rafId = requestAnimationFrame(tick);
+        const { width, height } = this.canvas;
+        const cx = width / 2;
+        const cy = height / 2;
+        const start = performance.now();
+
+        const tick = (now: number) => {
+          const t = now - start;
+          ctx.clearRect(0, 0, width, height);
+
+          if (t < PHASE1_END) {
+            // ── Phase 1: line extends from centre ──────────────
+            const p = t / PHASE1_END;
+            const halfLen = p * width * 0.6;
+
+            ctx.beginPath();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = accent;
+            ctx.lineWidth = 2;
+            ctx.moveTo(cx - halfLen, cy);
+            ctx.lineTo(cx + halfLen, cy);
+            ctx.stroke();
+            this.overlay.style.opacity = "1";
+
+          } else if (t < PHASE2_END) {
+            // ── Phase 2: sine wave grows ────────────────────────
+            const p = (t - PHASE1_END) / (PHASE2_END - PHASE1_END);
+            const amplitude = p * 35;
+            const frequency = 0.025;
+            const offset = t * 0.003;
+
+            ctx.beginPath();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = accent;
+            ctx.lineWidth = 2;
+
+            for (let x = 0; x <= width; x++) {
+              const y = cy + amplitude * Math.sin(frequency * x + offset);
+              x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            this.overlay.style.opacity = "1";
+
+          } else if (t < PHASE3_END) {
+            // ── Phase 3: wave expands, overlay fades out ────────
+            const p = (t - PHASE2_END) / (PHASE3_END - PHASE2_END);
+            const amplitude = 35 + p * 80;
+            const frequency = Math.max(0.01, 0.025 - p * 0.01);
+            const offset = t * 0.003;
+            const alpha = 1 - p;
+
+            this.overlay.style.opacity = String(alpha);
+
+            ctx.beginPath();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = accent;
+            ctx.lineWidth = 2 + p;
+
+            for (let x = 0; x <= width; x++) {
+              const y = cy + amplitude * Math.sin(frequency * x + offset);
+              x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+          } else {
+            // ── Done ───────────────────────────────────────────
+            this.remove();
+            resolve();
+            return;
+          }
+
+          this.rafId = requestAnimationFrame(tick);
+        };
+
+        // Kick off the animation loop
+        this.rafId = requestAnimationFrame(tick);
+      }); // end outer rAF
     });
   }
 
@@ -139,8 +145,16 @@ export class WaveIntro {
   // ----------------------------------------------------------
 
   private sizeCanvas(): void {
-    this.canvas.width = this.overlay.clientWidth || this.container.clientWidth || 600;
-    this.canvas.height = this.overlay.clientHeight || this.container.clientHeight || 400;
+    // getBoundingClientRect forces layout and returns real dimensions,
+    // avoiding the clientWidth/clientHeight = 0 problem during first render.
+    const overlayRect = this.overlay.getBoundingClientRect();
+    const containerRect = this.container.getBoundingClientRect();
+
+    const w = Math.round(overlayRect.width || containerRect.width) || 600;
+    const h = Math.round(overlayRect.height || containerRect.height) || 400;
+
+    this.canvas.width = w;
+    this.canvas.height = h;
   }
 
   private remove(): void {

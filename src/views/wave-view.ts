@@ -21,6 +21,7 @@ export class WaveView extends ItemView {
   private canvas: HTMLCanvasElement | null = null;
   private animFrameId: number | null = null;
   private waveOffset = 0;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SinPlugin) {
     super(leaf);
@@ -312,9 +313,23 @@ export class WaveView extends ItemView {
   private startWaveAnimation(): void {
     if (!this.canvas) return;
 
-    const resizeObserver = new ResizeObserver(() => this.resizeCanvas());
-    resizeObserver.observe(this.containerEl);
-    this.resizeCanvas();
+    // Disconnect any previous observer to avoid leaks across refreshes
+    this.resizeObserver?.disconnect();
+
+    const canvasParent = this.canvas.parentElement ?? this.containerEl;
+    // Also observe the Obsidian view-content element (children[1]) which is
+    // guaranteed to have dimensions and reflects pane resize events.
+    const viewContent = this.containerEl.children[1] as HTMLElement | undefined;
+
+    this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
+    this.resizeObserver.observe(canvasParent);
+    if (viewContent && viewContent !== canvasParent) {
+      this.resizeObserver.observe(viewContent);
+    }
+
+    // Defer the first resize to the next animation frame so the browser
+    // has performed layout before we read dimensions (avoids height=0).
+    requestAnimationFrame(() => this.resizeCanvas());
 
     const draw = () => {
       this.drawWaves();
@@ -328,8 +343,17 @@ export class WaveView extends ItemView {
     if (!this.canvas) return;
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    this.canvas.width = parent.clientWidth;
-    this.canvas.height = parent.clientHeight;
+
+    // getBoundingClientRect forces layout computation; fall back to the
+    // Obsidian pane element (containerEl) which always has defined dimensions.
+    const rect = parent.getBoundingClientRect();
+    const w = Math.round(rect.width) || this.containerEl.clientWidth || 400;
+    const h = Math.round(rect.height) || this.containerEl.clientHeight || 300;
+
+    if (w > 0 && h > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
   }
 
   private drawWaves(): void {
@@ -374,6 +398,8 @@ export class WaveView extends ItemView {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
   }
 
   // ----------------------------------------------------------
