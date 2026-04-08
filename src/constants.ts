@@ -35,7 +35,21 @@ export const SIN_RIBBON_ICON = "activity";
 
 /** Wave animation layers */
 export const WAVE_LAYERS = [
-  { amplitude: 40, frequency: 0.02, speed: 0.015, opacity: 0.06 },
-  { amplitude: 25, frequency: 0.03, speed: 0.020, opacity: 0.04 },
-  { amplitude: 15, frequency: 0.05, speed: 0.025, opacity: 0.03 },
+  { amplitude: 35, frequency: 0.018, speed: 0.008, opacity: 0.22 },
+  { amplitude: 22, frequency: 0.028, speed: 0.013, opacity: 0.16 },
+  { amplitude: 14, frequency: 0.042, speed: 0.019, opacity: 0.11 },
+];
+
+/** Preset emojis for habit icons */
+export const HABIT_EMOJIS = [
+  "📌", "🏃", "📚", "💪", "🧘", "🍎", "💊", "🌙",
+  "⭐", "🎯", "💧", "🧹", "🎵", "📝", "🌿", "🏋️",
+  "✏️", "🛌", "🚶", "🧠",
+];
+
+/** Preset emojis for schedule icons */
+export const SCHEDULE_EMOJIS = [
+  "📅", "🦷", "🏥", "🎂", "✈️", "💼", "🛒", "🎉",
+  "📞", "🚗", "🏫", "🍽️", "👔", "🏃", "📝", "🎬",
+  "🎓", "💰", "🏠", "💈",
 ];

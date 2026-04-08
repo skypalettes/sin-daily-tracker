@@ -1,7 +1,7 @@
 import { App, Modal, Notice, normalizePath } from "obsidian";
 import { Habit, CycleType, WeekDay } from "../types";
 import { serializeHabit } from "../models/habit";
-import { WEEK_DAYS, WEEK_DAY_LABELS } from "../constants";
+import { WEEK_DAYS, WEEK_DAY_LABELS, HABIT_EMOJIS } from "../constants";
 import type SinPlugin from "../main";
 
 export class HabitModal extends Modal {
@@ -76,16 +76,44 @@ export class HabitModal extends Modal {
       input.addEventListener("input", () => { this.name = input.value; });
     });
 
-    // Icon
+    // Icon — text input + emoji picker
+    let iconInput: HTMLInputElement;
     this.addField(form, "アイコン (絵文字)", (row) => {
-      const input = row.createEl("input", {
+      iconInput = row.createEl("input", {
         type: "text",
         cls: "sin-input sin-input--short",
         placeholder: "📌",
         value: this.icon,
       });
-      input.addEventListener("input", () => { this.icon = input.value.trim() || "📌"; });
+      iconInput.addEventListener("input", () => {
+        this.icon = iconInput.value.trim() || "📌";
+        refreshEmojiPicker();
+      });
     });
+
+    const emojiRow = form.createDiv({ cls: "sin-form-row" });
+    emojiRow.createEl("span", { cls: "sin-form-label" });
+    const emojiPicker = emojiRow.createDiv({ cls: "sin-emoji-picker" });
+
+    const refreshEmojiPicker = () => {
+      emojiPicker.querySelectorAll<HTMLButtonElement>(".sin-emoji-btn").forEach((btn) => {
+        btn.toggleClass("sin-emoji-btn--active", btn.dataset.emoji === this.icon);
+      });
+    };
+
+    for (const emoji of HABIT_EMOJIS) {
+      const btn = emojiPicker.createEl("button", {
+        cls: `sin-emoji-btn${emoji === this.icon ? " sin-emoji-btn--active" : ""}`,
+        text: emoji,
+        type: "button",
+      });
+      btn.dataset.emoji = emoji;
+      btn.addEventListener("click", () => {
+        this.icon = emoji;
+        iconInput.value = emoji;
+        refreshEmojiPicker();
+      });
+    }
 
     // Color
     this.addField(form, "カラー", (row) => {
