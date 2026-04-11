@@ -4,18 +4,21 @@
 
 /* ---- CSS Custom Properties -------------------------------- */
 :root {
-  --sin-primary: var(--interactive-accent);
+  --sin-primary: #4ECDC4;
   --sin-bg: var(--background-primary);
   --sin-bg-secondary: var(--background-secondary);
   --sin-text: var(--text-normal);
   --sin-text-muted: var(--text-muted);
   --sin-border: var(--background-modifier-border);
-  --sin-wave-color: var(--interactive-accent);
+  --sin-wave-color: #4ECDC4;
   --sin-streak-color: #FF6B6B;
   --sin-success-color: #4ECDC4;
   --sin-schedule-color: #FFE66D;
-  --sin-radius: 8px;
-  --sin-radius-sm: 4px;
+  --sin-radius: 16px;
+  --sin-radius-sm: 10px;
+  --sin-glass-bg: color-mix(in srgb, var(--background-primary) 60%, transparent);
+  --sin-glass-border: color-mix(in srgb, var(--text-normal) 10%, transparent);
+  --sin-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 /* ============================================================
@@ -48,12 +51,12 @@
 .sin-content {
   position: relative;
   z-index: 1;
-  padding: 20px;
-  max-width: 900px;
+  padding: 40px 20px;
+  max-width: 800px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* ============================================================
@@ -61,10 +64,13 @@
    ============================================================ */
 
 .sin-section {
-  background: var(--sin-bg-secondary);
-  border: 1px solid var(--sin-border);
+  background: var(--sin-glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--sin-glass-border);
   border-radius: var(--sin-radius);
-  padding: 16px;
+  box-shadow: var(--sin-glass-shadow);
+  padding: 24px;
 }
 
 .sin-section-title {
@@ -88,7 +94,9 @@
   color: var(--sin-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--sin-glass-border);
+  padding-bottom: 8px;
 }
 
 /* ============================================================
@@ -123,32 +131,33 @@
 .sin-habit-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 12px 16px;
   border-radius: var(--sin-radius-sm);
-  background: var(--sin-bg);
-  border: 1px solid var(--sin-border);
+  background: color-mix(in srgb, var(--background-secondary) 50%, transparent);
+  border: 1px solid var(--sin-glass-border);
   cursor: pointer;
   position: relative;
   overflow: hidden;
   min-height: 44px; /* touch target */
-  transition: border-color 0.15s, background 0.15s;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   user-select: none;
 }
 
 /* Hover: pointer devices only */
 @media (hover: hover) and (pointer: fine) {
   .sin-habit-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    border-color: var(--sin-primary);
+    transform: translateY(-3px) scale(1.01);
+    background: color-mix(in srgb, var(--background-secondary) 80%, transparent);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    border-color: color-mix(in srgb, var(--sin-primary) 40%, transparent);
   }
 }
 
 /* Touch feedback */
 @media (hover: none) {
   .sin-habit-item:active {
-    background: var(--sin-bg-secondary);
+    background: color-mix(in srgb, var(--background-secondary) 80%, transparent);
     transition: background 0.1s;
   }
 }
@@ -165,25 +174,32 @@
 /* ---- Checkbox -------------------------------------------- */
 
 .sin-checkbox {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   border-radius: 50%;
-  border: 2px solid var(--sin-primary);
+  border: 2px solid color-mix(in srgb, var(--text-normal) 30%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  transition: background 0.15s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sin-habit-item--done .sin-checkbox {
   background: var(--sin-success-color);
   border-color: var(--sin-success-color);
+  animation: sin-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes sin-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
 }
 
 .sin-checkbox-check {
-  color: #fff;
+  color: #181a1f;
   font-size: 0.75em;
   font-weight: 700;
   line-height: 1;
@@ -240,12 +256,13 @@
 .sin-schedule-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 12px 16px;
   border-radius: var(--sin-radius-sm);
-  background: var(--sin-bg);
-  border: 1px solid var(--sin-border);
+  background: color-mix(in srgb, var(--background-secondary) 50%, transparent);
+  border: 1px solid var(--sin-glass-border);
   min-height: 40px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .sin-schedule-item--done {
@@ -289,12 +306,13 @@
 .sin-upcoming-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 12px 16px;
   border-radius: var(--sin-radius-sm);
-  background: var(--sin-bg);
-  border: 1px solid var(--sin-border);
+  background: color-mix(in srgb, var(--background-secondary) 50%, transparent);
+  border: 1px solid var(--sin-glass-border);
   min-height: 40px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .sin-upcoming-date {
@@ -355,26 +373,30 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 18px;
+  padding: 10px 24px;
   border-radius: 20px;
   font-size: 0.9em;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  border: 2px solid transparent;
+  border: 1px solid var(--sin-primary);
+  background: var(--sin-glass-bg);
+  color: var(--sin-primary);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   min-height: 44px;
-  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.1s;
   position: relative;
   overflow: hidden;
 }
 
 .sin-btn--primary {
   background: var(--sin-primary);
-  color: var(--text-on-accent);
+  color: #181a1f;
   border-color: var(--sin-primary);
 }
 
 .sin-btn--secondary {
-  background: transparent;
+  background: var(--sin-glass-bg);
   color: var(--sin-primary);
   border-color: var(--sin-primary);
 }
@@ -387,8 +409,14 @@
 
 @media (hover: hover) and (pointer: fine) {
   .sin-btn:hover {
+    background: var(--sin-primary);
+    color: #181a1f;
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--sin-primary) 40%, transparent);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .sin-btn--primary:hover {
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--sin-primary) 40%, transparent);
   }
 }
 
@@ -402,43 +430,106 @@
 
 .sin-ripple {
   position: absolute;
-  width: 60px;
-  height: 60px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: radial-gradient(
+    circle,
+    rgba(78, 205, 196, 0.4) 0%,
+    transparent 70%
+  );
   transform: scale(0);
-  animation: sin-ripple-anim 0.6s linear;
+  animation: sin-water-drop 0.6s cubic-bezier(0.1, 0.7, 0.3, 1);
   pointer-events: none;
   top: 50%;
   left: 50%;
-  margin-top: -30px;
-  margin-left: -30px;
+  margin-top: -50px;
+  margin-left: -50px;
 }
 
-@keyframes sin-ripple-anim {
+@keyframes sin-water-drop {
   to {
-    transform: scale(4);
+    transform: scale(3);
     opacity: 0;
   }
 }
 
 /* ============================================================
-   Wave Intro Overlay  (Phase 2)
+   Startup Animation Overlay
    ============================================================ */
 
-.sin-wave-intro-overlay {
+.sin-startup-overlay {
   position: absolute;
   inset: 0;
-  z-index: 10;
-  background: var(--sin-bg);
-  pointer-events: none;
+  background-color: var(--background-primary);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  overflow: hidden;
 }
 
-.sin-wave-intro-canvas {
+.sin-startup-wave {
   position: absolute;
-  inset: 0;
+  bottom: -120%;
+  left: 0;
   width: 100%;
-  height: 100%;
+  height: 120%;
+  background: linear-gradient(
+    0deg,
+    rgba(78, 205, 196, 0.6) 0%,
+    rgba(78, 205, 196, 0.1) 60%,
+    transparent 100%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+  animation: sin-wave-infuse 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes sin-wave-infuse {
+  0%   { transform: translateY(0); opacity: 0; }
+  10%  { opacity: 1; }
+  70%  { transform: translateY(-100%); opacity: 1; }
+  100% { transform: translateY(-100%); opacity: 0; }
+}
+
+.sin-startup-logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(30px);
+  animation: sin-logo-reveal 3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+}
+
+@keyframes sin-logo-reveal {
+  0%   { opacity: 0; transform: translateY(30px) scale(0.95); filter: blur(5px); }
+  30%  { opacity: 1; transform: translateY(0) scale(1);       filter: blur(0px); }
+  75%  { opacity: 1; transform: translateY(0) scale(1);       filter: blur(0px); }
+  100% { opacity: 0; transform: translateY(-20px) scale(1.05); filter: blur(10px); }
+}
+
+.sin-startup-logo-icon {
+  width: 80px;
+  height: 80px;
+  stroke: var(--sin-primary);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  filter: drop-shadow(0 0 16px rgba(78, 205, 196, 0.8));
+}
+
+.sin-startup-logo-text {
+  font-family: monospace, sans-serif;
+  font-size: 2.5em;
+  font-weight: bold;
+  color: var(--sin-primary);
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 20px rgba(78, 205, 196, 0.8);
 }
 
 /* ============================================================
@@ -499,6 +590,9 @@
   .sin-habit-item { transition: none; }
   .sin-checkbox-check { animation: none; }
   .sin-checkbox-check--exit { animation: none; }
+  .sin-startup-wave { animation: none; }
+  .sin-startup-logo-container { animation: none; opacity: 1; transform: none; }
+  .sin-habit-item--done .sin-checkbox { animation: none; }
 }
 
 /* ============================================================
@@ -892,32 +986,34 @@
 
 .sin-tab-bar {
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--sin-bg-secondary);
-  border-radius: 14px;
+  gap: 8px;
+  padding: 6px;
+  background: var(--sin-glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 20px;
   width: fit-content;
   margin: 0 auto 4px;
-  border: 1px solid var(--sin-border);
+  border: 1px solid var(--sin-glass-border);
 }
 
 /* Override the inherited .sin-tab-btn in tab-bar context for larger tabs */
 .sin-tab-bar .sin-tab-btn {
-  padding: 6px 16px;
+  padding: 8px 16px;
   font-size: 0.88em;
-  border-radius: 10px;
+  border-radius: 14px;
   border: none;
   min-height: 34px;
   background: transparent;
   color: var(--sin-text-muted);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .sin-tab-bar .sin-tab-btn--active {
   background: var(--sin-primary);
-  color: var(--text-on-accent);
+  color: #181a1f;
 }
 
 .sin-tab-bar .sin-tab-btn:not(.sin-tab-btn--active):hover {
@@ -933,9 +1029,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 0 4px;
+  gap: 16px;
+  padding: 0 0 20px;
   flex-wrap: wrap;
+  font-size: 1.05em;
+  font-weight: bold;
 }
 
 .sin-date-nav-arrow {
