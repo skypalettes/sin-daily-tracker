@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sin - Startup & UI Preview</title>
+  <style>
+    /* ============================================================
+       Variables (Obsidian & Sin Custom)
+       ============================================================ */
+    :root {
+      --background-primary: #181a1f;
+      --background-secondary: #21252b;
+      --text-normal: #dcddde;
+      --text-muted: #8b929a;
+      
+      --sin-primary: #4ECDC4; 
+      --sin-success-color: #4ECDC4;
+      --sin-schedule-color: #FFE66D;
+      --sin-streak-color: #FF6B6B;
+      
+      --sin-glass-bg: color-mix(in srgb, var(--background-primary) 60%, transparent);
+      --sin-glass-border: color-mix(in srgb, var(--text-normal) 10%, transparent);
+      --sin-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      
+      --sin-radius: 16px; 
+      --sin-radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--background-primary);
+      color: var(--text-normal);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ============================================================
+       1. Startup Animation (The Infusing Wave)
+       ============================================================ */
+    .sin-startup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--background-primary);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: all;
+      opacity: 1; /* 初期状態は表示 */
+      transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+    }
+
+    .sin-startup-wave {
+      position: absolute;
+      bottom: -120%; 
+      left: 0;
+      width: 100%;
+      height: 120%;
+      background: linear-gradient(0deg, 
+        rgba(78, 205, 196, 0.6) 0%, 
+        rgba(78, 205, 196, 0.1) 60%, 
+        transparent 100%
+      );
+      filter: blur(12px);
+      pointer-events: none;
+      animation: sin-wave-infuse 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    @keyframes sin-wave-infuse {
+      0% { transform: translateY(0); opacity: 0; }
+      10% { opacity: 1; }
+      70% { transform: translateY(-100%); opacity: 1; }
+      100% { transform: translateY(-100%); opacity: 0; }
+    }
+
+    .sin-startup-logo-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      z-index: 10;
+      opacity: 0;
+      transform: translateY(30px);
+      animation: sin-logo-reveal 3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+    }
+
+    @keyframes sin-logo-reveal {
+      0% { opacity: 0; transform: translateY(30px) scale(0.95); filter: blur(5px); }
+      30% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
+      75% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
+      100% { opacity: 0; transform: translateY(-20px) scale(1.05); filter: blur(10px); }
+    }
+
+    .sin-startup-logo-icon {
+      width: 80px;
+      height: 80px;
+      stroke: var(--sin-primary); 
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      filter: drop-shadow(0 0 16px color-mix(in srgb, var(--sin-primary) 80%, transparent));
+    }
+
+    .sin-startup-logo-text {
+      font-family: monospace, sans-serif;
+      font-size: 2.5em;
+      font-weight: bold;
+      color: var(--sin-primary);
+      letter-spacing: 0.15em;
+      text-shadow: 0 0 20px color-mix(in srgb, var(--sin-primary) 80%, transparent);
+    }
+
+    /* ============================================================
+       2. Main UI (Glassmorphism & Wave Canvas)
+       ============================================================ */
+    .sin-wave-view {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+    }
+
+    .sin-wave-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .sin-content {
+      position: relative;
+      z-index: 1;
+      padding: 40px 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .sin-tab-bar {
+      display: flex;
+      gap: 8px;
+      padding: 6px;
+      background: var(--sin-glass-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 20px;
+      border: 1px solid var(--sin-glass-border);
+      width: fit-content;
+      margin: 0 auto;
+    }
+
+    .sin-tab-btn {
+      padding: 8px 16px;
+      border-radius: 14px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .sin-tab-btn--active { background: var(--sin-primary); color: #181a1f; }
+
+    .sin-section {
+      background: var(--sin-glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--sin-glass-border);
+      border-radius: var(--sin-radius);
+      box-shadow: var(--sin-glass-shadow);
+      padding: 24px;
+    }
+
+    .sin-date-nav {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      font-size: 1.1em;
+      font-weight: bold;
+    }
+
+    .sin-today-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 600px) { .sin-today-grid { grid-template-columns: 1fr; } }
+
+    .sin-subsection-title {
+      font-size: 0.85em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--sin-glass-border);
+      padding-bottom: 8px;
+    }
+
+    .sin-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .sin-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: color-mix(in srgb, var(--background-secondary) 50%, transparent);
+      border: 1px solid var(--sin-glass-border);
+      border-radius: var(--sin-radius-sm);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      user-select: none;
+    }
+
+    .sin-item:hover {
+      transform: translateY(-3px) scale(1.01);
+      background: color-mix(in srgb, var(--background-secondary) 80%, transparent);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      border-color: color-mix(in srgb, var(--sin-primary) 40%, transparent);
+    }
+
+    .sin-checkbox {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid color-mix(in srgb, var(--text-normal) 30%, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .sin-item--done { opacity: 0.6; }
+    .sin-item--done .sin-checkbox {
+      border-color: var(--sin-success-color);
+      background: var(--sin-success-color);
+      animation: sin-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes sin-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+    .sin-checkbox-check {
+      color: #181a1f;
+      font-weight: bold;
+      font-size: 0.9em;
+      display: none;
+    }
+    
+    .sin-item--done .sin-checkbox-check {
+      display: block;
+      stroke-dasharray: 20;
+      stroke-dashoffset: 20;
+      animation: sin-draw-check 0.3s 0.1s forwards ease-out;
+    }
+
+    @keyframes sin-draw-check { to { stroke-dashoffset: 0; } }
+
+    .sin-item--done .sin-name { text-decoration: line-through; }
+    .sin-name { flex: 1; font-size: 0.95em; }
+    .sin-streak { font-size: 0.8em; color: var(--sin-streak-color); font-weight: bold; }
+    .sin-time { font-size: 0.85em; color: var(--sin-schedule-color); font-weight: bold; }
+
+    .sin-ripple {
+      position: absolute;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: radial-gradient(circle, color-mix(in srgb, var(--sin-success-color) 40%, transparent) 0%, transparent 70%);
+      transform: scale(0);
+      animation: sin-water-drop 0.6s cubic-bezier(0.1, 0.7, 0.3, 1);
+      pointer-events: none;
+      top: 50%; left: 50%; margin-top: -50px; margin-left: -50px;
+    }
+
+    @keyframes sin-water-drop { to { transform: scale(3); opacity: 0; } }
+
+    .sin-actions { display: flex; justify-content: center; gap: 16px; margin-top: 16px; }
+    .sin-btn {
+      padding: 10px 24px;
+      border-radius: 20px;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--sin-glass-bg);
+      border: 1px solid var(--sin-primary);
+      color: var(--sin-primary);
+      backdrop-filter: blur(8px);
+    }
+
+    .sin-btn:hover {
+      background: var(--sin-primary);
+      color: #181a1f;
+      box-shadow: 0 4px 16px color-mix(in srgb, var(--sin-primary) 40%, transparent);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sin-startup-overlay" id="startupOverlay">
+    <div class="sin-startup-wave"></div>
+    <div class="sin-startup-logo-container" id="logoContainer">
+      <svg class="sin-startup-logo-icon" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+        <path d="M 5 50 Q 25 10 50 50 T 95 50" />
+      </svg>
+      <div class="sin-startup-logo-text">Sin</div>
+    </div>
+  </div>
+
+  <div class="sin-wave-view">
+    <canvas class="sin-wave-canvas" id="waveCanvas"></canvas>
+    <div class="sin-content">
+      <div class="sin-tab-bar">
+        <button class="sin-tab-btn sin-tab-btn--active">今日</button>
+        <button class="sin-tab-btn">今後の予定</button>
+        <button class="sin-tab-btn">サマリー</button>
+      </div>
+
+      <div class="sin-section">
+        <div class="sin-date-nav">
+          <span style="cursor:pointer; color: var(--text-muted)">◀</span>
+          <span>2026/04/11 (土)</span>
+          <span style="cursor:pointer; color: var(--text-muted)">▶</span>
+        </div>
+
+        <div class="sin-today-grid">
+          <div>
+            <div class="sin-subsection-title">習慣</div>
+            <div class="sin-list" id="habitList">
+              <div class="sin-item">
+                <div class="sin-checkbox"><span class="sin-checkbox-check">✓</span></div>
+                <span>🏃</span>
+                <span class="sin-name">朝のランニング</span>
+                <span class="sin-streak">🔥 12日連続</span>
+              </div>
+              <div class="sin-item sin-item--done">
+                <div class="sin-checkbox"><span class="sin-checkbox-check">✓</span></div>
+                <span>📖</span>
+                <span class="sin-name">読書 30分</span>
+                <span class="sin-streak">🔥 3日連続</span>
+              </div>
+              <div class="sin-item">
+                <div class="sin-checkbox"><span class="sin-checkbox-check">✓</span></div>
+                <span>🌱</span>
+                <span class="sin-name">植物の水やり</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="sin-subsection-title">予定</div>
+            <div class="sin-list">
+              <div class="sin-item" style="cursor: default;">
+                <span class="sin-time">14:30</span>
+                <span>🦷</span>
+                <span class="sin-name">歯医者 定期検診</span>
+              </div>
+              <div class="sin-item" style="cursor: default;">
+                <span class="sin-time">19:00</span>
+                <span>🍽️</span>
+                <span class="sin-name">チーム夕食会</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sin-actions">
+        <button class="sin-btn">+ 習慣を追加</button>
+        <button class="sin-btn">+ 予定を追加</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // 1. Startup Animation Logic
+    // ============================================================
+    const overlay = document.getElementById('startupOverlay');
+    const logoContainer = document.getElementById('logoContainer');
+
+    // ロゴのアニメーションが終了したら、オーバーレイ全体をフェードアウトさせる
+    logoContainer.addEventListener('animationend', (e) => {
+      // sin-logo-reveal のアニメーションが終わったタイミング
+      if (e.animationName === 'sin-logo-reveal') {
+        overlay.style.opacity = '0';
+        
+        // CSSのtransition(0.6s)が終わった後にDOMから非表示にする
+        setTimeout(() => {
+          overlay.style.display = 'none';
+        }, 600);
+      }
+    });
+
+    // ============================================================
+    // 2. Checkbox Ripple Interaction
+    // ============================================================
+    document.querySelectorAll('.sin-item').forEach(item => {
+      if (!item.querySelector('.sin-checkbox')) return;
+      item.addEventListener('click', function() {
+        this.classList.toggle('sin-item--done');
+        if (this.classList.contains('sin-item--done')) {
+          const ripple = document.createElement('div');
+          ripple.className = 'sin-ripple';
+          this.appendChild(ripple);
+          setTimeout(() => ripple.remove(), 600);
+        }
+      });
+    });
+
+    // ============================================================
+    // 3. Canvas Wave Animation (Neon & Fluid Layers)
+    // ============================================================
+    const canvas = document.getElementById('waveCanvas');
+    const ctx = canvas.getContext('2d');
+    let waveOffset = 0;
+
+    const WAVE_LAYERS = [
+      { amplitude: 60, frequency: 0.008, speed: 0.003, opacity: 0.10, offset: 0 },
+      { amplitude: 40, frequency: 0.015, speed: 0.006, opacity: 0.15, offset: 2 },
+      { amplitude: 20, frequency: 0.025, speed: 0.010, opacity: 0.25, offset: 5 },
+    ];
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function drawWaves() {
+      const { width, height } = canvas;
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < WAVE_LAYERS.length; i++) {
+        const { amplitude, frequency, speed, opacity, offset } = WAVE_LAYERS[i];
+        
+        const scrollX = waveOffset * speed * 50;
+        const baseY = height * 0.7 + (i * 30); 
+
+        ctx.beginPath();
+        ctx.moveTo(0, height); 
+        for (let x = 0; x <= width; x += 2) {
+          const y = baseY + amplitude * Math.sin(frequency * (x + scrollX) + offset);
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+
+        const gradient = ctx.createLinearGradient(0, baseY - amplitude * 2, 0, height);
+        gradient.addColorStop(0, `rgba(78, 205, 196, ${opacity})`);
+        gradient.addColorStop(1, `rgba(78, 205, 196, 0)`);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        ctx.strokeStyle = `rgba(78, 205, 196, ${opacity * 2})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      waveOffset += 1;
+      requestAnimationFrame(drawWaves);
+    }
+    drawWaves();
+  </script>
+</body>
+</html>
