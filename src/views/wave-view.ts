@@ -153,9 +153,6 @@ export class WaveView extends ItemView {
     const isToday = isSameDay(this.currentDate, today);
     const isFuture = this.currentDate > today;
 
-    // Date navigation header
-    this.renderDateNav(parent, isToday);
-
     // Fetch data only for the selected date
     const [todayHabits, todaySchedules] = await Promise.all([
       this.habitTracker.getTodayHabits(this.currentDate).catch(() => [] as TodayHabit[]),
@@ -163,6 +160,9 @@ export class WaveView extends ItemView {
     ]);
 
     const section = parent.createDiv({ cls: "sin-section sin-today-section" });
+
+    // Date navigation header — inside section
+    this.renderDateNav(section, isToday);
 
     // Past / future badge
     if (!isToday) {
@@ -674,36 +674,33 @@ export class WaveView extends ItemView {
 
     ctx.clearRect(0, 0, width, height);
 
-    const accentColor =
-      getComputedStyle(this.contentEl)
-        .getPropertyValue("--interactive-accent")
-        .trim() || "#7b6cd4";
-
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
-    const wavesPerLayer = 4;
 
     for (let i = 0; i < layerCount; i++) {
-      const { amplitude, frequency, speed, opacity } = WAVE_LAYERS[i];
-      ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = opacity;
+      const { amplitude, frequency, speed, opacity, offset } = WAVE_LAYERS[i];
 
-      const spacing = height / wavesPerLayer;
-      const scrollY = (this.waveOffset * speed * 20) % spacing;
+      const scrollX = this.waveOffset * speed * 50;
+      const baseY = height * 0.7 + i * 30;
 
-      for (let w = 0; w < wavesPerLayer + 1; w++) {
-        const baseY = height - w * spacing + scrollY;
-        ctx.beginPath();
-        for (let x = 0; x <= width; x++) {
-          const y = baseY + amplitude * Math.sin(frequency * x + i * 2.1 + w * 1.3);
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+      for (let x = 0; x <= width; x += 2) {
+        const y = baseY + amplitude * Math.sin(frequency * (x + scrollX) + offset);
+        ctx.lineTo(x, y);
       }
-    }
+      ctx.lineTo(width, height);
+      ctx.closePath();
 
-    ctx.globalAlpha = 1;
+      const gradient = ctx.createLinearGradient(0, baseY - amplitude * 2, 0, height);
+      gradient.addColorStop(0, `rgba(78, 205, 196, ${opacity})`);
+      gradient.addColorStop(1, `rgba(78, 205, 196, 0)`);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(78, 205, 196, ${opacity * 2})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
 
   private stopWaveAnimation(): void {
