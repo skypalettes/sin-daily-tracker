@@ -11,11 +11,19 @@ import type SinPlugin from "../main";
 
 const DAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
 
+export type ViewMode = "today" | "upcoming" | "summary";
+
 export class WaveView extends ItemView {
   private plugin: SinPlugin;
   private fileManager: SinFileManager;
   private habitTracker: HabitTracker;
   private scheduleManager: ScheduleManager;
+
+  // View mode (tab selection)
+  private mode: ViewMode = "today";
+
+  // Active date (Feature 2 – defaults to today on open)
+  private currentDate: Date = startOfDay(new Date());
 
   // Canvas wave animation
   private canvas: HTMLCanvasElement | null = null;
@@ -44,13 +52,24 @@ export class WaveView extends ItemView {
   }
 
   // ----------------------------------------------------------
+  // Public API
+  // ----------------------------------------------------------
+
+  setMode(mode: ViewMode): void {
+    if (this.mode === mode) return;
+    this.mode = mode;
+    this.refresh();
+  }
+
+  // ----------------------------------------------------------
   // Lifecycle
   // ----------------------------------------------------------
 
   async onOpen(): Promise<void> {
+    this.currentDate = startOfDay(new Date());
     await this.fileManager.ensureFolders();
 
-    // Auto-generate today's log so habits appear even without a toggle
+    // Auto-generate today's log
     try {
       await this.habitTracker.ensureTodayLog(new Date());
     } catch {
@@ -84,75 +103,168 @@ export class WaveView extends ItemView {
     }
 
     const content = this.contentEl.createDiv({ cls: "sin-content" });
-    const today = new Date();
 
-    // --- Performance: load all view data in parallel ---
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const weekStart = getWeekStart(today, this.plugin.settings.weekStartDay);
+    // Tab bar
+    this.renderTabBar(content);
 
-    const [todayHabits, todaySchedules, upcomingSchedules] = await Promise.all([
-      this.habitTracker.getTodayHabits(today).catch(() => [] as TodayHabit[]),
-      this.scheduleManager.getTodaySchedules(today).catch(() => [] as Schedule[]),
-      this.scheduleManager
-        .getUpcoming(this.plugin.settings.upcomingDays, tomorrow)
-        .catch(() => [] as Schedule[]),
-    ]);
-
-    // Today section
-    await this.renderTodaySection(content, today, todayHabits, todaySchedules);
-
-    // Upcoming section
-    this.renderUpcomingSection(content, upcomingSchedules);
-
-    // Summary section (weekly / monthly stats)
-    this.renderSummarySection(content, today, weekStart);
-
-    // Action buttons
-    this.renderActionButtons(content);
+    // Mode-specific content
+    if (this.mode === "today") {
+      await this.renderTodayMode(content);
+    } else if (this.mode === "upcoming") {
+      await this.renderUpcomingMode(content);
+    } else {
+      await this.renderSummaryMode(content);
+    }
   }
 
   // ----------------------------------------------------------
-  // Today section
+  // Tab bar
   // ----------------------------------------------------------
 
-  private async renderTodaySection(
-    parent: HTMLElement,
-    today: Date,
-    todayHabits: TodayHabit[],
-    todaySchedules: Schedule[]
-  ): Promise<void> {
+  private renderTabBar(parent: HTMLElement): void {
+    const bar = parent.createDiv({ cls: "sin-tab-bar" });
+
+    const tabs: { mode: ViewMode; label: string }[] = [
+      { mode: "today", label: "今日" },
+      { mode: "upcoming", label: "今後の予定" },
+      { mode: "summary", label: "サマリー" },
+    ];
+
+    for (const { mode, label } of tabs) {
+      const btn = bar.createEl("button", {
+        cls: `sin-tab-btn${this.mode === mode ? " sin-tab-btn--active" : ""}`,
+        text: label,
+      });
+      btn.addEventListener("click", () => {
+        if (this.mode !== mode) {
+          this.mode = mode;
+          this.refresh();
+        }
+      });
+    }
+  }
+
+  // ----------------------------------------------------------
+  // Today mode  (Feature 1 + Feature 2)
+  // ----------------------------------------------------------
+
+  private async renderTodayMode(parent: HTMLElement): Promise<void> {
+    const today = startOfDay(new Date());
+    const isToday = isSameDay(this.currentDate, today);
+    const isFuture = this.currentDate > today;
+
+    // Date navigation header
+    this.renderDateNav(parent, isToday);
+
+    // Fetch data only for the selected date
+    const [todayHabits, todaySchedules] = await Promise.all([
+      this.habitTracker.getTodayHabits(this.currentDate).catch(() => [] as TodayHabit[]),
+      this.scheduleManager.getTodaySchedules(this.currentDate).catch(() => [] as Schedule[]),
+    ]);
+
     const section = parent.createDiv({ cls: "sin-section sin-today-section" });
 
-    // Title
-    const titleEl = section.createDiv({ cls: "sin-section-title" });
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, "0");
-    const d = String(today.getDate()).padStart(2, "0");
-    const dow = DAY_JA[today.getDay()];
-    titleEl.setText(`今日  ${y}/${m}/${d} (${dow})`);
+    // Past / future badge
+    if (!isToday) {
+      const badge = section.createDiv({
+        cls: `sin-date-badge sin-date-badge--${isFuture ? "future" : "past"}`,
+        text: isFuture ? "未来の予定" : "過去の記録",
+      });
+      badge.setAttribute("aria-label", isFuture ? "未来日を表示中" : "過去日を表示中");
+    }
 
     const grid = section.createDiv({ cls: "sin-today-grid" });
 
     const habitsCol = grid.createDiv({ cls: "sin-today-col" });
-    this.renderHabitChecklist(habitsCol, today, todayHabits);
+    const habitReadOnly = isFuture && !this.plugin.settings.allowFutureHabitToggle;
+    this.renderHabitChecklist(habitsCol, this.currentDate, todayHabits, habitReadOnly);
 
     const schedulesCol = grid.createDiv({ cls: "sin-today-col" });
     this.renderScheduleList(schedulesCol, todaySchedules);
+
+    // Action buttons
+    this.renderActionButtons(parent);
   }
 
-  // ---- Habit checklist -------------------------------------
+  // ----------------------------------------------------------
+  // Date navigation (Feature 2)
+  // ----------------------------------------------------------
+
+  private renderDateNav(parent: HTMLElement, isToday: boolean): void {
+    const nav = parent.createDiv({ cls: "sin-date-nav" });
+
+    // Prev day button
+    const prevBtn = nav.createEl("button", { cls: "sin-date-nav-arrow", text: "◀" });
+    prevBtn.setAttribute("aria-label", "前の日");
+    prevBtn.addEventListener("click", () => {
+      this.currentDate = addDays(this.currentDate, -1);
+      this.refresh();
+    });
+
+    // Date display / picker trigger
+    const dateBtn = nav.createEl("button", { cls: "sin-date-nav-label" });
+    dateBtn.setText(formatNavDate(this.currentDate));
+    dateBtn.setAttribute("aria-label", "日付を選択");
+
+    // Hidden date input for native picker
+    const dateInput = nav.createEl("input") as HTMLInputElement;
+    dateInput.type = "date";
+    dateInput.value = toDateString(this.currentDate);
+    dateInput.addClass("sin-date-input-hidden");
+    dateInput.addEventListener("change", () => {
+      const picked = parseLocalDate(dateInput.value);
+      if (picked) {
+        this.currentDate = picked;
+        this.refresh();
+      }
+    });
+
+    dateBtn.addEventListener("click", () => {
+      dateInput.value = toDateString(this.currentDate);
+      try {
+        // showPicker() is Chromium-only; cast avoids TS lib type gap
+        (dateInput as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+      } catch {
+        dateInput.click();
+      }
+    });
+
+    // Next day button
+    const nextBtn = nav.createEl("button", { cls: "sin-date-nav-arrow", text: "▶" });
+    nextBtn.setAttribute("aria-label", "次の日");
+    nextBtn.addEventListener("click", () => {
+      this.currentDate = addDays(this.currentDate, 1);
+      this.refresh();
+    });
+
+    // "Today" reset button (hidden when already on today)
+    if (!isToday) {
+      const todayBtn = nav.createEl("button", {
+        cls: "sin-date-nav-today",
+        text: "今日に戻る",
+      });
+      todayBtn.addEventListener("click", () => {
+        this.currentDate = startOfDay(new Date());
+        this.refresh();
+      });
+    }
+  }
+
+  // ----------------------------------------------------------
+  // Habit checklist
+  // ----------------------------------------------------------
 
   private renderHabitChecklist(
     parent: HTMLElement,
-    today: Date,
-    todayHabits: TodayHabit[]
+    date: Date,
+    todayHabits: TodayHabit[],
+    readOnly: boolean
   ): void {
     const wrapper = parent.createDiv({ cls: "sin-subsection" });
     wrapper.createDiv({ cls: "sin-subsection-title", text: "習慣" });
 
     if (todayHabits.length === 0) {
-      wrapper.createDiv({ cls: "sin-empty", text: "今日の習慣はありません。" });
+      wrapper.createDiv({ cls: "sin-empty", text: "この日の習慣はありません。" });
       return;
     }
 
@@ -160,10 +272,10 @@ export class WaveView extends ItemView {
 
     for (const { habit, completed, streak } of todayHabits) {
       const item = list.createDiv({
-        cls: `sin-habit-item${completed ? " sin-habit-item--done" : ""}`,
+        cls: `sin-habit-item${completed ? " sin-habit-item--done" : ""}${readOnly ? " sin-habit-item--readonly" : ""}`,
       });
 
-      // Checkbox (click area: whole item minus the actions button)
+      // Checkbox
       const checkbox = item.createDiv({ cls: "sin-checkbox" });
       if (completed) checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
 
@@ -175,7 +287,7 @@ export class WaveView extends ItemView {
         item.createDiv({ cls: "sin-streak", text: `🔥 ${streak}日連続` });
       }
 
-      // ⋮ context menu button (edit / archive / delete)
+      // ⋮ context menu (edit / archive / delete) — always available
       const actions = item.createDiv({ cls: "sin-habit-actions" });
       const menuBtn = actions.createEl("button", { cls: "sin-icon-btn", text: "⋮" });
       menuBtn.setAttribute("aria-label", "操作");
@@ -222,38 +334,45 @@ export class WaveView extends ItemView {
         menu.showAtMouseEvent(e);
       });
 
-      // Toggle completion on item click (excluding menu button)
-      item.addEventListener("click", async () => {
-        try {
-          const nowCompleted = await this.habitTracker.toggleCompletion(habit, today);
-          item.toggleClass("sin-habit-item--done", nowCompleted);
-          if (nowCompleted) {
-            checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
-          } else {
-            const check = checkbox.querySelector(".sin-checkbox-check");
-            if (check instanceof HTMLElement) {
-              check.addClass("sin-checkbox-check--exit");
-              setTimeout(() => checkbox.empty(), 200);
+      // Toggle completion on item click (not read-only, excludes menu button)
+      if (!readOnly) {
+        item.addEventListener("click", async () => {
+          try {
+            const nowCompleted = await this.habitTracker.toggleCompletion(habit, date);
+            item.toggleClass("sin-habit-item--done", nowCompleted);
+            if (nowCompleted) {
+              checkbox.createSpan({ text: "✓", cls: "sin-checkbox-check" });
             } else {
-              checkbox.empty();
+              const check = checkbox.querySelector(".sin-checkbox-check");
+              if (check instanceof HTMLElement) {
+                check.addClass("sin-checkbox-check--exit");
+                setTimeout(() => checkbox.empty(), 200);
+              } else {
+                checkbox.empty();
+              }
             }
+            this.ripple(item);
+          } catch {
+            new Notice("習慣の更新に失敗しました。");
           }
-          this.ripple(item);
-        } catch {
-          new Notice("習慣の更新に失敗しました。");
-        }
-      });
+        });
+      } else {
+        // Show tooltip hint for future dates
+        item.setAttribute("title", "未来日の習慣は操作できません");
+      }
     }
   }
 
-  // ---- Schedule list (today) --------------------------------
+  // ----------------------------------------------------------
+  // Schedule list (today mode)
+  // ----------------------------------------------------------
 
   private renderScheduleList(parent: HTMLElement, schedules: Schedule[]): void {
     const wrapper = parent.createDiv({ cls: "sin-subsection" });
     wrapper.createDiv({ cls: "sin-subsection-title", text: "予定" });
 
     if (schedules.length === 0) {
-      wrapper.createDiv({ cls: "sin-empty", text: "今日の予定はありません。" });
+      wrapper.createDiv({ cls: "sin-empty", text: "この日の予定はありません。" });
       return;
     }
 
@@ -272,7 +391,6 @@ export class WaveView extends ItemView {
       cls: `sin-schedule-item${schedule.done ? " sin-schedule-item--done" : ""}`,
     });
 
-    // Done toggle circle
     if (showDoneToggle) {
       const doneBtn = item.createEl("button", { cls: "sin-schedule-done-btn" });
       doneBtn.setAttribute("aria-label", schedule.done ? "未完了に戻す" : "完了にする");
@@ -296,7 +414,6 @@ export class WaveView extends ItemView {
     item.createSpan({ cls: "sin-schedule-icon", text: schedule.icon });
     item.createSpan({ cls: "sin-schedule-name", text: schedule.name });
 
-    // Edit button
     const editBtn = item.createEl("button", { cls: "sin-icon-btn sin-schedule-edit-btn" });
     editBtn.setText("✎");
     editBtn.setAttribute("aria-label", "編集");
@@ -309,12 +426,26 @@ export class WaveView extends ItemView {
   }
 
   // ----------------------------------------------------------
-  // Upcoming section
+  // Upcoming mode  (Feature 1)
   // ----------------------------------------------------------
 
-  private renderUpcomingSection(parent: HTMLElement, upcoming: Schedule[]): void {
+  private async renderUpcomingMode(parent: HTMLElement): Promise<void> {
     const section = parent.createDiv({ cls: "sin-section sin-upcoming-section" });
     section.createDiv({ cls: "sin-section-title", text: "今後の予定" });
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    let upcoming: Schedule[] = [];
+    try {
+      upcoming = await this.scheduleManager.getUpcoming(
+        this.plugin.settings.upcomingDays,
+        tomorrow
+      );
+    } catch {
+      section.createDiv({ cls: "sin-empty", text: "今後の予定の読み込みに失敗しました。" });
+      return;
+    }
 
     if (upcoming.length === 0) {
       section.createDiv({ cls: "sin-empty", text: "今後の予定はありません。" });
@@ -333,7 +464,6 @@ export class WaveView extends ItemView {
         item.createSpan({ cls: "sin-upcoming-time", text: schedule.time });
       }
 
-      // Edit button
       const editBtn = item.createEl("button", { cls: "sin-icon-btn sin-upcoming-edit-btn" });
       editBtn.setText("✎");
       editBtn.setAttribute("aria-label", "編集");
@@ -342,23 +472,31 @@ export class WaveView extends ItemView {
         new ScheduleModal(this.app, this.plugin, schedule, () => this.refresh()).open();
       });
     }
+
+    // Add schedule button
+    const bar = parent.createDiv({ cls: "sin-action-bar" });
+    const scheduleBtn = bar.createEl("button", {
+      cls: "sin-btn sin-btn--secondary",
+      text: "+ 予定を追加",
+    });
+    scheduleBtn.addEventListener("click", () => {
+      new ScheduleModal(this.app, this.plugin, null, () => this.refresh()).open();
+    });
   }
 
   // ----------------------------------------------------------
-  // Summary section (Phase 3)
+  // Summary mode  (Feature 1)
   // ----------------------------------------------------------
 
-  private renderSummarySection(
-    parent: HTMLElement,
-    today: Date,
-    weekStart: Date
-  ): void {
+  private async renderSummaryMode(parent: HTMLElement): Promise<void> {
+    const today = new Date();
+    const weekStart = getWeekStart(today, this.plugin.settings.weekStartDay);
+
     const section = parent.createDiv({ cls: "sin-section sin-summary-section" });
 
     const titleRow = section.createDiv({ cls: "sin-summary-title-row" });
     titleRow.createDiv({ cls: "sin-section-title", text: "サマリー" });
 
-    // Tab buttons
     const tabBar = titleRow.createDiv({ cls: "sin-summary-tabs" });
     const weeklyBtn = tabBar.createEl("button", {
       cls: "sin-tab-btn sin-tab-btn--active",
@@ -373,12 +511,15 @@ export class WaveView extends ItemView {
 
     const renderWeekly = async () => {
       statsContainer.empty();
+      statsContainer.createDiv({ cls: "sin-stats-loading", text: "読み込み中…" });
       weeklyBtn.addClass("sin-tab-btn--active");
       monthlyBtn.removeClass("sin-tab-btn--active");
 
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
       const range = `${formatShortDate(weekStart)}〜${formatShortDate(weekEnd)}`;
+
+      statsContainer.empty();
       statsContainer.createDiv({ cls: "sin-stats-range", text: range });
 
       try {
@@ -395,11 +536,13 @@ export class WaveView extends ItemView {
 
     const renderMonthly = async () => {
       statsContainer.empty();
+      statsContainer.createDiv({ cls: "sin-stats-loading", text: "読み込み中…" });
       monthlyBtn.addClass("sin-tab-btn--active");
       weeklyBtn.removeClass("sin-tab-btn--active");
 
       const year = today.getFullYear();
       const month = today.getMonth() + 1;
+      statsContainer.empty();
       statsContainer.createDiv({
         cls: "sin-stats-range",
         text: `${year}/${String(month).padStart(2, "0")}`,
@@ -420,7 +563,6 @@ export class WaveView extends ItemView {
     weeklyBtn.addEventListener("click", () => renderWeekly());
     monthlyBtn.addEventListener("click", () => renderMonthly());
 
-    // Initial render (async, fire-and-forget — section skeleton already in DOM)
     renderWeekly();
   }
 
@@ -437,7 +579,6 @@ export class WaveView extends ItemView {
       const barWrapper = item.createDiv({ cls: "sin-stat-bar-wrapper" });
       const bar = barWrapper.createDiv({ cls: "sin-stat-bar" });
       const fill = bar.createDiv({ cls: "sin-stat-bar-fill" });
-      // Delay width assignment slightly so CSS transition can play
       requestAnimationFrame(() => { fill.style.width = `${rate}%`; });
 
       item.createDiv({
@@ -448,7 +589,7 @@ export class WaveView extends ItemView {
   }
 
   // ----------------------------------------------------------
-  // Action buttons
+  // Action buttons (today mode)
   // ----------------------------------------------------------
 
   private renderActionButtons(parent: HTMLElement): void {
@@ -467,7 +608,8 @@ export class WaveView extends ItemView {
       text: "+ 予定を追加",
     });
     scheduleBtn.addEventListener("click", () => {
-      new ScheduleModal(this.app, this.plugin, null, () => this.refresh()).open();
+      // Pass the currently viewed date as default for the new schedule
+      new ScheduleModal(this.app, this.plugin, null, () => this.refresh(), this.currentDate).open();
     });
   }
 
@@ -488,7 +630,6 @@ export class WaveView extends ItemView {
     if (!this.canvas) return;
 
     this.resizeObserver?.disconnect();
-
     this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
     this.resizeObserver.observe(this.contentEl);
 
@@ -539,8 +680,6 @@ export class WaveView extends ItemView {
         .trim() || "#7b6cd4";
 
     const layerCount = width < 400 ? 1 : WAVE_LAYERS.length;
-
-    // Number of wave lines tiled vertically per layer
     const wavesPerLayer = 4;
 
     for (let i = 0; i < layerCount; i++) {
@@ -549,15 +688,11 @@ export class WaveView extends ItemView {
       ctx.lineWidth = 1.5;
       ctx.globalAlpha = opacity;
 
-      // Spacing between repeated wave lines
       const spacing = height / wavesPerLayer;
-      // scrollY increases → wave moves upward (subtract from Y)
       const scrollY = (this.waveOffset * speed * 20) % spacing;
 
       for (let w = 0; w < wavesPerLayer + 1; w++) {
-        // Start from bottom, scroll upward over time
         const baseY = height - w * spacing + scrollY;
-
         ctx.beginPath();
         for (let x = 0; x <= width; x++) {
           const y = baseY + amplitude * Math.sin(frequency * x + i * 2.1 + w * 1.3);
@@ -591,8 +726,49 @@ export class WaveView extends ItemView {
 }
 
 // ----------------------------------------------------------
-// Helpers
+// Date helpers
 // ----------------------------------------------------------
+
+function startOfDay(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function toDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseLocalDate(s: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split("-").map(Number);
+  return startOfDay(new Date(y, m - 1, d));
+}
+
+function formatNavDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const dow = DAY_JA[d.getDay()];
+  return `${y}/${m}/${day} (${dow})`;
+}
 
 function formatUpcomingDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -608,10 +784,6 @@ function formatShortDate(d: Date): string {
   return `${m}/${day}`;
 }
 
-/**
- * Returns the start of the week containing `today`, respecting
- * `weekStartDay` (0 = Sun, 1 = Mon, …).
- */
 function getWeekStart(today: Date, weekStartDay: number): Date {
   const d = new Date(today);
   d.setHours(0, 0, 0, 0);

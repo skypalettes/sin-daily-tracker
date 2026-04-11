@@ -20,7 +20,8 @@ export class ScheduleModal extends Modal {
     app: App,
     plugin: SinPlugin,
     existing: Schedule | null,
-    onSave: () => void
+    onSave: () => void,
+    defaultDate?: Date
   ) {
     super(app);
     this.plugin = plugin;
@@ -35,8 +36,8 @@ export class ScheduleModal extends Modal {
       this.allDay = existing.allDay;
       this.memo = existing.memo ?? "";
     } else {
-      // Default to today
-      this.date = new Date().toISOString().slice(0, 10);
+      const base = defaultDate ?? new Date();
+      this.date = base.toISOString().slice(0, 10);
     }
   }
 

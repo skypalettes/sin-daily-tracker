@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: SinSettings = {
   showStreaks: true,
   upcomingDays: 14,
   waveAnimationEnabled: true,
+  allowFutureHabitToggle: false,
+  autoRenameFiles: true,
 };
 
 export const HABITS_FOLDER = "habits";

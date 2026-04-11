@@ -65,17 +65,6 @@ export function serializeSchedule(schedule: Schedule): string {
 // Helpers
 // ------------------------------------------------------------
 
-/** Generate a slug from a schedule name for use in file names. */
-export function nameToSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w-]/g, "")
-    .replace(/-+/g, "-")
-    .slice(0, 40)
-    || "schedule";
-}
-
 /** Compare schedules by date then time for sorting. */
 export function compareSchedules(a: Schedule, b: Schedule): number {
   if (a.date !== b.date) return a.date < b.date ? -1 : 1;
