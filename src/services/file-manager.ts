@@ -1,7 +1,8 @@
 import { App, TFile, normalizePath } from "obsidian";
 import { Habit, Schedule, LogEntry, SinSettings } from "../types";
 import { parseHabitFrontmatter, serializeHabit } from "../models/habit";
-import { parseScheduleFrontmatter, serializeSchedule, nameToSlug } from "../models/schedule";
+import { parseScheduleFrontmatter, serializeSchedule } from "../models/schedule";
+import { toSafeFileName } from "../models/filename";
 import { HABITS_FOLDER, SCHEDULES_FOLDER, LOGS_FOLDER } from "../constants";
 
 // ------------------------------------------------------------
@@ -144,6 +145,11 @@ export class SinFileManager {
       }
     }
 
+    // Auto-rename: if the name changed, move the file to match the new name.
+    if (this.settings.autoRenameFiles) {
+      habit.filePath = await this.ensureHabitPath(habit);
+    }
+
     const content = serializeHabit(habit, bodyContent);
 
     const existingFile = this.app.vault.getAbstractFileByPath(habit.filePath);
@@ -152,6 +158,26 @@ export class SinFileManager {
     } else {
       await this.app.vault.create(habit.filePath, content);
     }
+  }
+
+  /**
+   * Return the canonical path for a habit (based on its current name).
+   * If the file already lives at a different path, rename it and return
+   * the new path.
+   */
+  private async ensureHabitPath(habit: Habit): Promise<string> {
+    const safe = toSafeFileName(habit.name, "habit");
+    const desiredPath = this.uniquePathExcluding(
+      this.habitsFolder(), safe, habit.filePath
+    );
+
+    if (habit.filePath === desiredPath) return habit.filePath;
+
+    const currentFile = this.app.vault.getAbstractFileByPath(habit.filePath);
+    if (currentFile instanceof TFile) {
+      await this.app.vault.rename(currentFile, desiredPath);
+    }
+    return desiredPath;
   }
 
   async deleteHabit(habit: Habit): Promise<void> {
@@ -163,18 +189,8 @@ export class SinFileManager {
 
   /** Generate a unique file path for a new habit. */
   newHabitPath(name: string): string {
-    const slug = name
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^\w-]/g, "")
-      .replace(/-+/g, "-")
-      .slice(0, 40) || "habit";
-
-    const base = normalizePath(`${this.habitsFolder()}/${slug}.md`);
-    if (!this.app.vault.getAbstractFileByPath(base)) return base;
-
-    const ts = Date.now().toString(36);
-    return normalizePath(`${this.habitsFolder()}/${slug}-${ts}.md`);
+    const safe = toSafeFileName(name, "habit");
+    return this.uniquePath(this.habitsFolder(), safe);
   }
 
   // ---- Schedules -------------------------------------------
@@ -204,6 +220,12 @@ export class SinFileManager {
 
   async writeSchedule(schedule: Schedule): Promise<void> {
     await this.ensureFolders();
+
+    // Auto-rename: if name or date changed, move the file to match.
+    if (this.settings.autoRenameFiles) {
+      schedule.filePath = await this.ensureSchedulePath(schedule);
+    }
+
     const content = serializeSchedule(schedule);
 
     const existingFile = this.app.vault.getAbstractFileByPath(schedule.filePath);
@@ -212,6 +234,27 @@ export class SinFileManager {
     } else {
       await this.app.vault.create(schedule.filePath, content);
     }
+  }
+
+  /**
+   * Return the canonical path for a schedule (date_name).
+   * Renames the file if it currently lives elsewhere.
+   */
+  private async ensureSchedulePath(schedule: Schedule): Promise<string> {
+    const safe = toSafeFileName(schedule.name, "schedule");
+    const desiredPath = this.uniquePathExcluding(
+      this.schedulesFolder(),
+      `${schedule.date}_${safe}`,
+      schedule.filePath
+    );
+
+    if (schedule.filePath === desiredPath) return schedule.filePath;
+
+    const currentFile = this.app.vault.getAbstractFileByPath(schedule.filePath);
+    if (currentFile instanceof TFile) {
+      await this.app.vault.rename(currentFile, desiredPath);
+    }
+    return desiredPath;
   }
 
   async deleteSchedule(schedule: Schedule): Promise<void> {
@@ -223,13 +266,68 @@ export class SinFileManager {
 
   /** Generate a unique file path for a new schedule. */
   newSchedulePath(date: string, name: string): string {
-    const slug = nameToSlug(name);
+    const safe = toSafeFileName(name, "schedule");
+    return this.uniquePath(this.schedulesFolder(), `${date}_${safe}`);
+  }
 
-    const base = normalizePath(`${this.schedulesFolder()}/${date}_${slug}.md`);
-    if (!this.app.vault.getAbstractFileByPath(base)) return base;
+  // ---- Internal helpers ------------------------------------
 
-    const ts = Date.now().toString(36);
-    return normalizePath(`${this.schedulesFolder()}/${date}_${slug}-${ts}.md`);
+  /**
+   * Return a unique `.md` path inside `folder` for the given `base` stem,
+   * appending " (2)", " (3)" … when the file already exists.
+   */
+  private uniquePath(folder: string, base: string): string {
+    return this.uniquePathExcluding(folder, base, "");
+  }
+
+  /**
+   * Like `uniquePath` but treats `excludePath` as available (used when
+   * the file being renamed already occupies a slot).
+   */
+  private uniquePathExcluding(
+    folder: string,
+    base: string,
+    excludePath: string
+  ): string {
+    const first = normalizePath(`${folder}/${base}.md`);
+    const existing = this.app.vault.getAbstractFileByPath(first);
+    if (!existing || normalizePath(first) === normalizePath(excludePath)) {
+      return first;
+    }
+
+    for (let n = 2; n < 9999; n++) {
+      const candidate = normalizePath(`${folder}/${base} (${n}).md`);
+      const c = this.app.vault.getAbstractFileByPath(candidate);
+      if (!c || normalizePath(candidate) === normalizePath(excludePath)) {
+        return candidate;
+      }
+    }
+    return first;
+  }
+
+  // ---- Bulk rename -----------------------------------------
+
+  /**
+   * Rename all habit/schedule files to match the current naming convention
+   * (toSafeFileName). Returns a count of files that were moved.
+   */
+  async bulkRenameFiles(): Promise<{ habits: number; schedules: number }> {
+    let habits = 0;
+    let schedules = 0;
+
+    const allHabits = await this.readHabits();
+    for (const habit of allHabits) {
+      const newPath = await this.ensureHabitPath(habit);
+      if (newPath !== habit.filePath) habits++;
+    }
+
+    const allSchedules = await this.readSchedules();
+    for (const schedule of allSchedules) {
+      const newPath = await this.ensureSchedulePath(schedule);
+      if (newPath !== schedule.filePath) schedules++;
+    }
+
+    return { habits, schedules };
   }
 
   // ---- Logs ------------------------------------------------

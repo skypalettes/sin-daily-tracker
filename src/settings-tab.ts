@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import type SinPlugin from "./main";
 
 export class SinSettingTab extends PluginSettingTab {
@@ -108,6 +108,52 @@ export class SinSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.showNotifications = value;
             await this.plugin.saveSettings();
+          })
+      );
+
+    // ------ Future habit toggle ------
+    new Setting(containerEl)
+      .setName("未来日の習慣チェックを許可")
+      .setDesc("今日より後の日付に切り替えたときも習慣のトグルを有効にします")
+      .addToggle((t) =>
+        t
+          .setValue(this.plugin.settings.allowFutureHabitToggle)
+          .onChange(async (value) => {
+            this.plugin.settings.allowFutureHabitToggle = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // ------ Auto rename files ------
+    new Setting(containerEl)
+      .setName("ファイル名を自動リネーム")
+      .setDesc("習慣・予定の名前を変更したとき、ファイル名も自動で更新します")
+      .addToggle((t) =>
+        t
+          .setValue(this.plugin.settings.autoRenameFiles)
+          .onChange(async (value) => {
+            this.plugin.settings.autoRenameFiles = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // ------ Bulk rename ------
+    new Setting(containerEl)
+      .setName("ファイル名を整理する")
+      .setDesc("既存の習慣・予定ファイルのファイル名を現在の名前に合わせてリネームします")
+      .addButton((btn) =>
+        btn
+          .setButtonText("整理する")
+          .onClick(async () => {
+            try {
+              const result = await this.plugin.fileManager.bulkRenameFiles();
+              new Notice(
+                `完了: 習慣 ${result.habits} 件、予定 ${result.schedules} 件を更新しました。`
+              );
+              this.plugin.refreshView();
+            } catch {
+              new Notice("ファイル名の整理中にエラーが発生しました。");
+            }
           })
       );
   }

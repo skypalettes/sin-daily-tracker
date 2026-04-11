@@ -73,4 +73,8 @@ export interface SinSettings {
   showStreaks: boolean;
   upcomingDays: number;
   waveAnimationEnabled: boolean;
+  /** Allow toggling habits on future dates (default: false) */
+  allowFutureHabitToggle: boolean;
+  /** Auto-rename habit/schedule files when their name changes (default: true) */
+  autoRenameFiles: boolean;
 }
