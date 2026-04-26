@@ -1,0 +1,178 @@
+name: ObsSamon Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "リリースバージョン（省略時は manifest.json から取得）"
+        required: false
+        default: ""
+      draft:
+        description: "ドラフト Release にするか"
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # 1. ソースリポジトリをチェックアウト
+      - uses: actions/checkout@v4
+
+      # 2. Node.js セットアップ
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # 3. 依存関係インストール
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. ビルド実行
+      - name: Build
+        run: npm run build
+
+      # 5. 成果物検証
+      - name: Verify artifacts
+        run: |
+          for FILE in main.js manifest.json; do
+            if [ ! -f "$FILE" ]; then
+              echo "Error: 必須ファイル '$FILE' が見つかりません"
+              exit 1
+            fi
+          done
+          echo "Artifact check passed"
+
+      # 6. バージョン解決
+      - name: Resolve version
+        id: resolve-version
+        run: |
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION=$(jq -r '.version' manifest.json)
+            if [ "$VERSION" = "null" ] || [ -z "$VERSION" ]; then
+              echo "Error: manifest.json に version フィールドがありません"
+              exit 1
+            fi
+          fi
+          echo "Resolved version: ${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      # 7. 同一バージョンの重複チェック
+      - name: Check duplicate release
+        env:
+          DEPLOY_TOKEN: ${{ secrets.OBSSAMON_DEPLOY_TOKEN }}
+        run: |
+          VERSION="${{ steps.resolve-version.outputs.version }}"
+          TAG="v${VERSION}"
+          TARGET_REPO="obs-samon/sin"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${DEPLOY_TOKEN}" \
+            "https://api.github.com/repos/${TARGET_REPO}/releases/tags/${TAG}")
+
+          case "$HTTP_CODE" in
+            404)
+              echo "Release '${TAG}' は未存在。続行します"
+              ;;
+            200)
+              echo "Error: Release '${TAG}' が '${TARGET_REPO}' に既に存在します。上書きは行いません"
+              exit 1
+              ;;
+            *)
+              echo "Error: GitHub API unexpectedly returned HTTP ${HTTP_CODE}"
+              echo "認証トークンの権限を確認してください"
+              exit 1
+              ;;
+          esac
+
+      # 8. 成果物をターゲットリポジトリにプッシュ
+      - name: Push artifacts to target repo
+        env:
+          DEPLOY_TOKEN: ${{ secrets.OBSSAMON_DEPLOY_TOKEN }}
+        run: |
+          VERSION="${{ steps.resolve-version.outputs.version }}"
+          TARGET_REPO="obs-samon/sin"
+
+          git clone "https://x-access-token:${DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" target-repo
+
+          cd target-repo
+
+          # 空リポジトリの場合はデフォルトブランチを作成
+          if ! git rev-parse HEAD >/dev/null 2>&1; then
+            git checkout -b main
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # ビルド成果物をコピー
+          cp ../main.js .
+          cp ../manifest.json .
+          if [ -f ../styles.css ]; then
+            cp ../styles.css .
+          fi
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Release v${VERSION}"
+            git push origin HEAD
+            echo "Artifacts pushed to ${TARGET_REPO}"
+          fi
+
+      # 9. Release 作成と Assets アップロード
+      - name: Create release and upload assets
+        id: create-release
+        env:
+          DEPLOY_TOKEN: ${{ secrets.OBSSAMON_DEPLOY_TOKEN }}
+        run: |
+          VERSION="${{ steps.resolve-version.outputs.version }}"
+          TAG="v${VERSION}"
+          TARGET_REPO="obs-samon/sin"
+          DRAFT="${{ github.event.inputs.draft }}"
+
+          RELEASE=$(curl -s -X POST \
+            -H "Authorization: token ${DEPLOY_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${TARGET_REPO}/releases" \
+            -d "{\"tag_name\": \"${TAG}\", \"name\": \"${TAG}\", \"draft\": ${DRAFT}}")
+
+          RELEASE_ID=$(echo "$RELEASE" | jq -r '.id')
+          UPLOAD_URL=$(echo "$RELEASE" | jq -r '.upload_url' | sed 's/{?name,label}//')
+
+          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
+            echo "Error: Release の作成に失敗しました"
+            echo "$RELEASE" | jq .
+            exit 1
+          fi
+
+          echo "Release created: ID=${RELEASE_ID}, tag=${TAG}"
+
+          for FILE in main.js manifest.json styles.css; do
+            if [ -f "$FILE" ]; then
+              echo "Uploading ${FILE}..."
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+                -H "Authorization: token ${DEPLOY_TOKEN}" \
+                -H "Content-Type: application/octet-stream" \
+                "${UPLOAD_URL}?name=${FILE}" \
+                --data-binary "@${FILE}")
+
+              if [ "$HTTP_CODE" != "201" ]; then
+                echo "Error: ${FILE} のアップロードに失敗しました (HTTP ${HTTP_CODE})"
+                exit 1
+              fi
+              echo "Uploaded ${FILE} (HTTP ${HTTP_CODE})"
+            fi
+          done
+
+          RELEASE_URL="https://github.com/${TARGET_REPO}/releases/tag/${TAG}"
+          echo "release-url=${RELEASE_URL}" >> $GITHUB_OUTPUT
+          echo "Release URL: ${RELEASE_URL}"

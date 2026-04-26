@@ -484,7 +484,7 @@
   );
   filter: blur(12px);
   pointer-events: none;
-  animation: sin-wave-infuse 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: sin-wave-infuse 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 @keyframes sin-wave-infuse {
@@ -502,7 +502,7 @@
   z-index: 10;
   opacity: 0;
   transform: translateY(30px);
-  animation: sin-logo-reveal 3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+  animation: sin-logo-reveal 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
 }
 
 @keyframes sin-logo-reveal {
